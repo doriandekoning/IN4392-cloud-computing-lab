@@ -1,1 +1,14 @@
 This is the worker.
+
+
+# Setup
+Get goagen: `go get -u github.com/goadesign/goa/...`
+
+# Generate
+`go generate`
+
+# Build
+`go build -o bin/worker`
+
+# Run 
+`bin/worker`

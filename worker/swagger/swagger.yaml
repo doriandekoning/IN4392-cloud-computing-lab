@@ -1,0 +1,36 @@
+consumes:
+- application/json
+- application/xml
+- application/gob
+- application/x-gob
+host: localhost:8080
+info:
+  description: A master
+  title: The master API
+  version: ""
+paths:
+  /health:
+    get:
+      description: Returns 200 if the node is helaty
+      operationId: health#health
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+      schemes:
+      - http
+      summary: health health
+      tags:
+      - health
+produces:
+- application/json
+- application/xml
+- application/gob
+- application/x-gob
+responses:
+  OK:
+    description: OK
+schemes:
+- http
+swagger: "2.0"
