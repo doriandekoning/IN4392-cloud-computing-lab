@@ -49,6 +49,13 @@ func (n Node) ReceiveMessage(message Message) {
 	n.SuperStep++
 
 	//Remove old messages
-	//TODO
+	for _, edge := range n.IncomingEdges {
+		for index, message := range edge.Messages {
+			if message.Step < n.SuperStep {
+				edge.Messages[index] = edge.Messages[len(edge.Messages)-1]
+				edge.Messages = edge.Messages[:len(edge.Messages)-1]
+			}
+		}
+	}
 
 }
