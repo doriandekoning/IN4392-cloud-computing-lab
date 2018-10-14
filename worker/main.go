@@ -47,6 +47,7 @@ func main() {
 	router.Use(loggingMiddleWare)
 	router.HandleFunc("/health", GetHealth)
 	router.HandleFunc("/subgraph", ReceiveSubgraph).Methods("POST")
+	router.HandleFunc("/message", ReceiveMessage).Methods("POST")
 
 	register()
 	go checkMasterHealth()
@@ -135,4 +136,23 @@ func checkMasterHealth() {
 		}
 		time.Sleep(10 * time.Second)
 	}
+}
+
+func ReceiveMessage(w http.ResponseWriter, r *http.Request) {
+
+	var message = Message{}
+	b, _ := ioutil.ReadAll(r.Body)
+	err := json.Unmarshal(b, &message)
+	if err != nil {
+		log.Fatal("Received bad message: ", err)
+	}
+	// Add message in the message queue of the corresponding edge
+	// TODO improve datastructures keeping messages (maybe a 2d map [sender][receiver] with an array of messages? so we can do this in constant time?)
+	for _, node := range subGraph.Nodes {
+		if node.Id == message.To {
+			node.ReceiveMessage(message)
+			break
+		}
+	}
+
 }
