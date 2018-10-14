@@ -49,5 +49,6 @@ func (n Node) ReceiveMessage(message Message) {
 	n.SuperStep++
 
 	//Remove old messages
+	//TODO
 
 }
