@@ -9,27 +9,21 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
-	"github.com/davecgh/go-spew/spew"
+	"github.com/levigross/grequests"
 
 	"github.com/gorilla/mux"
 )
 
+var g Graph
+
 type worker struct {
-	address string
+	Address string
+	Healty  bool
 }
 
 var workers []*worker
-
-type edge struct {
-	start  int
-	end    int
-	weight int
-}
-
-type graph struct {
-	edges []*edge
-}
 
 func main() {
 
@@ -39,6 +33,8 @@ func main() {
 	router.HandleFunc("/processgraph", ProcessGraph).Methods("POST")
 	router.HandleFunc("/worker/register", registerWorker).Methods("POST")
 	router.HandleFunc("/worker/unregister", unregisterWorker).Methods("DELETE")
+
+	go getWorkersHealth()
 	log.Fatal(http.ListenAndServe(":8000", router))
 
 }
@@ -55,12 +51,15 @@ func loggingMiddleWare(next http.Handler) http.Handler {
 }
 
 func ProcessGraph(w http.ResponseWriter, r *http.Request) {
-	graphSize := r.URL.Query().Get("graphsize")
-	fmt.Println(graphSize)
+	graphSize, _ := strconv.Atoi(r.URL.Query().Get("graphsize"))
+
+	graph := Graph{Nodes: make([]*Node, graphSize)}
+
+	for i := 0; i < graphSize; i++ {
+		graph.Nodes[i] = &Node{Id: i, IncomingEdges: []*Edge{}, OutgoingEdges: []*Edge{}}
+	}
 
 	csvReader := csv.NewReader(r.Body)
-	graph := graph{edges: make([]*edge, 0)}
-	lineNumber := 0
 	for {
 		line, err := csvReader.Read()
 		if err == io.EOF {
@@ -79,10 +78,9 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 			log.Fatal("Error converting string to int", err)
 		}
 
-		edge := edge{from, to, weight}
-		graph.edges = append(graph.edges, &edge)
-		lineNumber++
+		graph.addEdge(Edge{from, to, weight})
 	}
+	g = graph
 
 	//Asynchronously distribute the graph
 	go distributeGraph(&graph)
@@ -90,13 +88,14 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 
 func registerWorker(w http.ResponseWriter, r *http.Request) {
 	var newWorker worker
-	bodyBytes, _ := ioutil.ReadAll(r.Body)
-	err := json.Unmarshal(bodyBytes, &newWorker)
+
+	b, _ := ioutil.ReadAll(r.Body)
+	err := json.Unmarshal(b, &newWorker)
 	if err != nil {
 		log.Fatal("Error", err)
 	}
 	workers = append(workers, &newWorker)
-	fmt.Println("Worker: " + newWorker.address + " successfully registered!")
+	fmt.Println("Worker: " + newWorker.Address + " successfully registered!")
 }
 
 func unregisterWorker(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +106,7 @@ func unregisterWorker(w http.ResponseWriter, r *http.Request) {
 		log.Fatal("Error", err)
 	}
 	for index, worker := range workers {
-		if worker.address == oldWorker.address {
+		if worker.Address == oldWorker.Address {
 			//Move last worker to location of worker to remove
 			workers[index] = workers[len(workers)-1]
 			//Chop of last worker (since it is now at location of old one)
@@ -115,16 +114,55 @@ func unregisterWorker(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	fmt.Println("Worker: " + oldWorker.address + " successfully unregistered!")
+	fmt.Println("Worker: " + oldWorker.Address + " successfully unregistered!")
 }
 
-func distributeGraph(graph *graph) {
+func distributeGraph(graph *Graph) {
 	if len(workers) == 0 {
 		fmt.Println("No workers yet registered")
 		return
 	}
+	subGraphs := make([]Graph, len(workers))
+	for nodeIndex, node := range g.Nodes {
+		if subGraphs[nodeIndex%len(workers)].Nodes == nil {
+			subGraphs[nodeIndex%len(workers)].Nodes = make([]*Node, 0)
+		}
+		subGraphs[nodeIndex%len(workers)].Nodes = append(subGraphs[nodeIndex%len(workers)].Nodes, node)
+	}
 	// Distribute graph among workers
-	for _, worker := range workers {
-		spew.Dump(worker)
+	for index, worker := range workers {
+		err := sendSubgraphToWorker(subGraphs[index], worker)
+		if err != nil {
+			fmt.Println("Cannot distrubte graph to: " + worker.Address)
+		}
+		fmt.Println(worker)
+	}
+}
+
+func sendSubgraphToWorker(subGraph Graph, worker *worker) error {
+	options := grequests.RequestOptions{
+		JSON:    subGraph,
+		Headers: map[string]string{"Content-Type": "application/json"},
+	}
+	_, err := grequests.Post(worker.Address+"/subgraph", &options)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func getWorkersHealth() {
+	for {
+		for _, worker := range workers {
+			_, err := grequests.Get(worker.Address+"/health", nil)
+			if err != nil {
+				fmt.Println("Worker with address: "+worker.Address+" seems to have gone offline:", err)
+				worker.Healty = false
+			} else {
+				fmt.Println("Worker with address: " + worker.Address + " seems healthy!")
+				worker.Healty = true
+			}
+		}
+		time.Sleep(15 * time.Second)
 	}
 }
