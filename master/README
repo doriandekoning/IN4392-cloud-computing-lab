@@ -1,1 +1,9 @@
 This is the master node
+# Instal dependencis
+`go get ./..`
+
+# Build
+`go build -o bin/worker`
+
+# Run 
+`./bin/worker`
