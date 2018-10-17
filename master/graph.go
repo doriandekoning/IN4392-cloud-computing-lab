@@ -23,5 +23,5 @@ func (g Graph) addEdge(e Edge) {
 
 	toNode := g.Nodes[e.End]
 	g.Nodes[e.End] = toNode
-	toNode.IncomingEdges = append(toNode.OutgoingEdges, &e)
+	toNode.IncomingEdges = append(toNode.IncomingEdges, &e)
 }

@@ -1,18 +1,16 @@
 package main
 
-import "fmt"
-
 type Message struct {
 	From    int
 	To      int
-	Message int
+	Message float64
 	Step    int
 }
 
 type Edge struct {
 	Start    int
 	End      int
-	Weight   int
+	Weight   float64
 	Messages []*Message
 }
 
@@ -21,6 +19,11 @@ type Node struct {
 	IncomingEdges []*Edge
 	OutgoingEdges []*Edge
 	SuperStep     int
+	graph         *Graph
+	VoteToHalt    bool
+	//TODO (Not sure if this is only used for pagerank or all algorithms)
+	//therefore we might not want to store this here but in a seperate splice based on node id
+	Value float64
 }
 
 type Graph struct {
@@ -34,28 +37,38 @@ func (n Node) ReceiveMessage(message Message) {
 			break
 		}
 	}
-	// Check if all messages for current superstep are received
-	for _, edge := range n.IncomingEdges {
-		for _, message := range edge.Messages {
-			if message.Step != n.SuperStep {
-				return
-			}
-		}
-	}
-	//Handle superstep (all messages are here)
-	//TODO impelment step behaviour
+	n.VoteToHalt = false
+}
 
-	fmt.Println("Did superstep", n.SuperStep, "For node", n.Id)
+func (n *Node) DoStep() {
+	//For now pagerank according to https://kowshik.github.io/JPregel/pregel_paper.pdf
+	if n.SuperStep >= 1 {
+		sum := 0.0
+		for _, incomingEdge := range n.IncomingEdges {
+			if incomingEdge.Messages[0] != nil && incomingEdge.Messages[0].Step == n.SuperStep {
+				sum += float64(incomingEdge.Messages[0].Message)
+				//Remove first edge
+				incomingEdge.Messages = incomingEdge.Messages[1:]
+			}
+
+		}
+
+		n.Value = (0.15 / float64(len(n.graph.Nodes))) + (0.85 * sum)
+	}
+	if n.SuperStep < 3 {
+		// Send out sum of tentative pagerank divided by number of outgoing edges
+		for _, outgoingEdge := range n.OutgoingEdges {
+			m := Message{
+				From:    n.Id,
+				To:      outgoingEdge.End,
+				Message: n.Value / float64(len(n.OutgoingEdges)),
+				Step:    n.SuperStep + 1,
+			}
+			n.graph.Nodes[outgoingEdge.End].ReceiveMessage(m)
+		}
+	} else {
+		n.VoteToHalt = true
+	}
+
 	n.SuperStep++
-
-	//Remove old messages
-	for _, edge := range n.IncomingEdges {
-		for index, message := range edge.Messages {
-			if message.Step < n.SuperStep {
-				edge.Messages[index] = edge.Messages[len(edge.Messages)-1]
-				edge.Messages = edge.Messages[:len(edge.Messages)-1]
-			}
-		}
-	}
-
 }

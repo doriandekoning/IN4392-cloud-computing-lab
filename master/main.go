@@ -51,6 +51,7 @@ func loggingMiddleWare(next http.Handler) http.Handler {
 }
 
 func ProcessGraph(w http.ResponseWriter, r *http.Request) {
+	//TODO give float weights
 	graphSize, _ := strconv.Atoi(r.URL.Query().Get("graphsize"))
 
 	graph := Graph{Nodes: make([]*Node, graphSize)}
@@ -118,28 +119,20 @@ func unregisterWorker(w http.ResponseWriter, r *http.Request) {
 }
 
 func distributeGraph(graph *Graph) {
-	if len(workers) == 0 {
-		fmt.Println("No workers yet registered")
-		return
-	}
-	subGraphs := make([]Graph, len(workers))
-	for nodeIndex, node := range g.Nodes {
-		if subGraphs[nodeIndex%len(workers)].Nodes == nil {
-			subGraphs[nodeIndex%len(workers)].Nodes = make([]*Node, 0)
-		}
-		subGraphs[nodeIndex%len(workers)].Nodes = append(subGraphs[nodeIndex%len(workers)].Nodes, node)
-	}
 	// Distribute graph among workers
-	for index, worker := range workers {
-		err := sendSubgraphToWorker(subGraphs[index], worker)
-		if err != nil {
-			fmt.Println("Cannot distrubte graph to: " + worker.Address)
-		}
-		fmt.Println(worker)
+	var workerId int
+	if len(workers) == 0 {
+		log.Fatal("No workers available")
+		//TODO determine to which worker to send node (for now to first free worker)
+		workerId = 0
+	}
+	err := sendGraphToWorker(*graph, workers[workerId])
+	if err != nil {
+		fmt.Println("Cannot distributes graph to: " + workers[workerId].Address)
 	}
 }
 
-func sendSubgraphToWorker(subGraph Graph, worker *worker) error {
+func sendGraphToWorker(subGraph Graph, worker *worker) error {
 	options := grequests.RequestOptions{
 		JSON:    subGraph,
 		Headers: map[string]string{"Content-Type": "application/json"},
@@ -156,10 +149,8 @@ func getWorkersHealth() {
 		for _, worker := range workers {
 			_, err := grequests.Get(worker.Address+"/health", nil)
 			if err != nil {
-				fmt.Println("Worker with address: "+worker.Address+" seems to have gone offline:", err)
 				worker.Healty = false
 			} else {
-				fmt.Println("Worker with address: " + worker.Address + " seems healthy!")
 				worker.Healty = true
 			}
 		}

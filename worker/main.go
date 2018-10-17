@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
-
 	"github.com/gorilla/mux"
 
 	"github.com/levigross/grequests"
@@ -46,8 +44,7 @@ func main() {
 	router := mux.NewRouter()
 	router.Use(loggingMiddleWare)
 	router.HandleFunc("/health", GetHealth)
-	router.HandleFunc("/subgraph", ReceiveSubgraph).Methods("POST")
-	router.HandleFunc("/message", ReceiveMessage).Methods("POST")
+	router.HandleFunc("/subgraph", ReceiveGraph).Methods("POST")
 
 	register()
 	go checkMasterHealth()
@@ -88,7 +85,6 @@ func unregister() {
 		JSON:    map[string]string{"address": getOwnURL()},
 		Headers: map[string]string{"Content-Type": "application/json"},
 	}
-	spew.Dump(options)
 	_, err := grequests.Delete(getMasterURL()+"/worker/unregister", &options)
 	if err != nil {
 		log.Fatal("Unable to unregister: ", err)
@@ -115,13 +111,32 @@ func getOwnURL() string {
 	return conf.Own.Address + ":" + strconv.Itoa(conf.Own.Port)
 }
 
-func ReceiveSubgraph(w http.ResponseWriter, r *http.Request) {
+func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 	b, _ := ioutil.ReadAll(r.Body)
 	err := json.Unmarshal(b, &subGraph)
 	if err != nil {
 		log.Fatal("Error unmashalling subgraph", err)
 	}
 	fmt.Println("Received a subraph with:", len(subGraph.Nodes), " nodes")
+	for _, node := range subGraph.Nodes {
+		node.graph = &subGraph
+		node.Value = 0.33
+	}
+	step := 0
+outerloop:
+	for true {
+		step++
+		for _, node := range subGraph.Nodes {
+			node.DoStep()
+		}
+
+		for _, node := range subGraph.Nodes {
+			if !node.VoteToHalt {
+				continue outerloop
+			}
+		}
+		break
+	}
 
 }
 
@@ -131,28 +146,7 @@ func checkMasterHealth() {
 		if err != nil {
 			fmt.Println("Master seems to be offline")
 			register()
-		} else {
-			fmt.Println("Master seems healty")
 		}
 		time.Sleep(10 * time.Second)
 	}
-}
-
-func ReceiveMessage(w http.ResponseWriter, r *http.Request) {
-
-	var message = Message{}
-	b, _ := ioutil.ReadAll(r.Body)
-	err := json.Unmarshal(b, &message)
-	if err != nil {
-		log.Fatal("Received bad message: ", err)
-	}
-	// Add message in the message queue of the corresponding edge
-	// TODO improve datastructures keeping messages (maybe a 2d map [sender][receiver] with an array of messages? so we can do this in constant time?)
-	for _, node := range subGraph.Nodes {
-		if node.Id == message.To {
-			node.ReceiveMessage(message)
-			break
-		}
-	}
-
 }
