@@ -11,9 +11,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/levigross/grequests"
-
 	"github.com/gorilla/mux"
+	"github.com/levigross/grequests"
 )
 
 var g Graph
@@ -62,6 +61,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	csvReader := csv.NewReader(r.Body)
 	for {
 		line, err := csvReader.Read()
+
 		if err == io.EOF {
 			break
 		}

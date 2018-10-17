@@ -10,9 +10,7 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-
 	"github.com/gorilla/mux"
-
 	"github.com/levigross/grequests"
 	"github.com/vrischmann/envconfig"
 )
@@ -77,7 +75,7 @@ func register() {
 			fmt.Println("Successfully registered")
 			break
 		}
-		fmt.Println("Unable to register")
+		fmt.Println("Unable to register", err)
 		//Try again in 10 sec
 		time.Sleep(10 * time.Second)
 	}

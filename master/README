@@ -3,7 +3,7 @@ This is the master node
 `go get ./..`
 
 # Build
-`go build -o bin/worker`
+`go build -o bin/master`
 
 # Run 
-`./bin/worker`
+`./bin/master`
