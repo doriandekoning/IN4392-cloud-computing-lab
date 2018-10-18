@@ -52,14 +52,7 @@ func loggingMiddleWare(next http.Handler) http.Handler {
 }
 
 func ProcessGraph(w http.ResponseWriter, r *http.Request) {
-	//TODO give float weights
-	graphSize, _ := strconv.Atoi(r.URL.Query().Get("graphsize"))
-
-	graph := Graph{Nodes: make([]*Node, graphSize)}
-
-	for i := 0; i < graphSize; i++ {
-		graph.Nodes[i] = &Node{Id: i, IncomingEdges: []*Edge{}, OutgoingEdges: []*Edge{}}
-	}
+	//TODO give float weights to edges
 
 	csvReader := csv.NewReader(r.Body)
 	//Parse first line with vertex weights
@@ -67,13 +60,21 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	if err == io.EOF {
 		log.Fatalf("Cannot parse node weights")
 	}
-	//TODO remove graphsize from params
+	//Init graph
+	graph := Graph{Nodes: make([]*Node, len(line))}
+
+	//Init all nodes
 	for index, weight := range line {
 		parsedWeight, err := strconv.ParseFloat(weight, 64)
 		if err != nil {
 			log.Fatalf("Error reading edge weight %s", weight)
 		}
-		graph.Nodes[index].Value = parsedWeight
+		graph.Nodes[index] = &Node{
+			Id:            index,
+			IncomingEdges: []*Edge{},
+			OutgoingEdges: []*Edge{},
+			Value:         parsedWeight,
+		}
 	}
 	//Parse edges
 	for {
