@@ -109,7 +109,8 @@ func getOwnURL() string {
 func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 	b, _ := ioutil.ReadAll(r.Body)
 	err := json.Unmarshal(b, &graph)
-	algorithm := graphs.Pagerank{}
+	algorithm := graphs.SortestPath{Graph: &graph}
+	algorithm.Initialize()
 	if err != nil {
 		log.Fatal("Error unmashalling graph", err)
 	}
@@ -119,13 +120,13 @@ func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 	step := 0
 outerloop:
 	for true {
-		step++
 		for _, node := range graph.Nodes {
-			algorithm.Step(node)
+			algorithm.Step(node, step)
 		}
+		step++
 
 		for _, node := range graph.Nodes {
-			if !node.VoteToHalt {
+			if !node.VotedToHalt {
 				continue outerloop
 			}
 		}

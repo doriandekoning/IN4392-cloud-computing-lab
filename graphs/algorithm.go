@@ -1,46 +1,99 @@
 package graphs
 
+import (
+	"fmt"
+	"math"
+)
+
 type AlgorithmInterface interface {
+	Initialize()
 	Step(n *Node)
 }
 
 type Pagerank struct {
 	//Implement AlgorithmInterface
 	AlgorithmInterface
+	Graph *Graph
+}
+
+func (instance *Pagerank) Initialize() {
+
 }
 
 //TODO check if we can pass the step variable to this function
-func (v *Pagerank) Step(n *Node) {
+func (instance *Pagerank) Step(n *Node, step int) {
 	//For now pagerank according to https://kowshik.github.io/JPregel/pregel_paper.pdf
-	if n.SuperStep >= 1 {
+	if step >= 1 {
 		sum := 0.0
 		for _, incomingEdge := range n.IncomingEdges {
-			if incomingEdge.Messages[0] != nil && incomingEdge.Messages[0].Step == n.SuperStep {
+			if incomingEdge.Messages[0] != nil && incomingEdge.Messages[0].Step == step {
 				sum += float64(incomingEdge.Messages[0].Message)
-				//Remove first edge
+				//Remove first message
 				incomingEdge.Messages = incomingEdge.Messages[1:]
 			}
 
 		}
 
-		n.Value = (0.15 / float64(len(n.Graph.Nodes))) + (0.85 * sum)
+		n.Value = (0.15 / float64(len(instance.Graph.Nodes))) + (0.85 * sum)
 	}
-	if n.SuperStep < 3 {
+	if step < 3 {
 		// Send out sum of tentative pagerank divided by number of outgoing edges
 		for _, outgoingEdge := range n.OutgoingEdges {
 			m := Message{
 				From:    n.Id,
 				To:      outgoingEdge.End,
 				Message: n.Value / float64(len(n.OutgoingEdges)),
-				Step:    n.SuperStep + 1,
+				Step:    step + 1,
 			}
-			n.Graph.Nodes[outgoingEdge.End].ReceiveMessage(m)
+			instance.Graph.Nodes[outgoingEdge.End].ReceiveMessage(m)
 		}
 	} else {
-		n.VoteToHalt = true
+		n.VotedToHalt = true
 	}
 
-	n.SuperStep++
 }
 
-//TODO impelement maxval
+type SortestPath struct {
+	//implement AlgorithmInterface
+	AlgorithmInterface
+	Graph    *Graph
+	SourceID int
+}
+
+func (instance *SortestPath) Initialize() {
+	for _, n := range instance.Graph.Nodes {
+		n.Value = math.MaxFloat64
+	}
+}
+
+func (instance *SortestPath) Step(n *Node, step int) {
+	// Set mindist to max int (int with all bits 1 except the first)
+	minDist := math.MaxFloat64
+	if n.Id == instance.SourceID {
+		minDist = 0
+	}
+	fmt.Println("Doing step", step)
+	for _, message := range n.GetMessages(step) {
+		fmt.Println("Processed message")
+		minDist = math.Min(minDist, message.Message)
+		//Remove first message
+		// incomingEdge.Messages = incomingEdge.Messages[1:]
+	}
+
+	if minDist < n.Value {
+		n.Value = minDist
+		for _, outgoingEdge := range n.OutgoingEdges {
+			fmt.Println(minDist + outgoingEdge.Weight)
+			//TODO make function that builds message and stuff
+			m := Message{
+				From:    n.Id,
+				To:      outgoingEdge.End,
+				Message: minDist + outgoingEdge.Weight,
+				Step:    step + 1,
+			}
+			instance.Graph.Nodes[outgoingEdge.End].ReceiveMessage(m)
+		}
+	}
+	n.VoteToHalt()
+
+}
