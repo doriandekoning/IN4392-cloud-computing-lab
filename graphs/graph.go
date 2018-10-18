@@ -10,7 +10,7 @@ type Message struct {
 type Edge struct {
 	Start    int
 	End      int
-	Weight   int
+	Weight   float32
 	Messages []*Message
 }
 

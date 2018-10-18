@@ -91,12 +91,12 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 		}
 		from, err1 := strconv.Atoi(line[0])
 		to, err2 := strconv.Atoi(line[1])
-		weight, err3 := strconv.Atoi(line[2])
+		weight, err3 := strconv.ParseFloat(line[2], 32)
 		if err1 != nil || err2 != nil || err3 != nil {
 			log.Fatal("Error converting string to int", err)
 		}
 
-		graph.AddEdge(graphs.Edge{Start: from, End: to, Weight: weight})
+		graph.AddEdge(graphs.Edge{Start: from, End: to, Weight: float32(weight)})
 	}
 	g = graph
 
