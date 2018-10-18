@@ -121,8 +121,6 @@ func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, node := range graph.Nodes {
 		node.graph = &graph
-		//TODO make dynamic
-		node.Value = 0.33
 	}
 	step := 0
 outerloop:

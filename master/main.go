@@ -62,6 +62,20 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	}
 
 	csvReader := csv.NewReader(r.Body)
+	//Parse first line with vertex weights
+	line, err := csvReader.Read()
+	if err == io.EOF {
+		log.Fatalf("Cannot parse node weights")
+	}
+	//TODO remove graphsize from params
+	for index, weight := range line {
+		parsedWeight, err := strconv.ParseFloat(weight, 64)
+		if err != nil {
+			log.Fatalf("Error reading edge weight %s", weight)
+		}
+		graph.Nodes[index].Value = parsedWeight
+	}
+	//Parse edges
 	for {
 		line, err := csvReader.Read()
 		if err == io.EOF {

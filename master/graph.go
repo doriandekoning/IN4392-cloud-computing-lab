@@ -10,6 +10,7 @@ type Node struct {
 	Id            int
 	IncomingEdges []*Edge
 	OutgoingEdges []*Edge
+	Value         float64
 }
 
 type Graph struct {
