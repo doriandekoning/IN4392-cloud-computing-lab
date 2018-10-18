@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/graphs"
+	"github.com/doriandekoning/IN4392-cloud-computing-lab/middleware"
 	"github.com/levigross/grequests"
 
 	"github.com/gorilla/mux"
@@ -29,7 +30,7 @@ var workers []*worker
 func main() {
 
 	router := mux.NewRouter()
-	router.Use(loggingMiddleWare)
+	router.Use(middleware.LoggingMiddleWare)
 	router.HandleFunc("/health", GetHealth).Methods("GET")
 	router.HandleFunc("/processgraph", ProcessGraph).Methods("POST")
 	router.HandleFunc("/worker/register", registerWorker).Methods("POST")
@@ -42,14 +43,6 @@ func main() {
 
 func GetHealth(w http.ResponseWriter, r *http.Request) {
 
-}
-
-func loggingMiddleWare(next http.Handler) http.Handler {
-	//TODO disalbe logs for health
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Println("[" + r.RequestURI + "]")
-		next.ServeHTTP(w, r)
-	})
 }
 
 func ProcessGraph(w http.ResponseWriter, r *http.Request) {
