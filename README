@@ -1,0 +1,14 @@
+This is the worker.
+
+# Instal dependencis
+`go get ./..`
+
+# Build
+## Worker
+`go build -o bin/worker worker/main.go`
+## Master
+`go build -o bin/master master/main.go`
+
+# Run 
+`./bin/worker`
+`./bin/master`

@@ -11,12 +11,13 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/doriandekoning/IN4392-cloud-computing-lab/graphs"
 	"github.com/levigross/grequests"
 
 	"github.com/gorilla/mux"
 )
 
-var g Graph
+var g graphs.Graph
 
 type worker struct {
 	Address string
@@ -61,7 +62,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 		log.Fatalf("Cannot parse node weights")
 	}
 	//Init graph
-	graph := Graph{Nodes: make([]*Node, len(line))}
+	graph := graphs.Graph{Nodes: make([]*graphs.Node, len(line))}
 
 	//Init all nodes
 	for index, weight := range line {
@@ -69,10 +70,10 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Fatalf("Error reading edge weight %s", weight)
 		}
-		graph.Nodes[index] = &Node{
+		graph.Nodes[index] = &graphs.Node{
 			Id:            index,
-			IncomingEdges: []*Edge{},
-			OutgoingEdges: []*Edge{},
+			IncomingEdges: []*graphs.Edge{},
+			OutgoingEdges: []*graphs.Edge{},
 			Value:         parsedWeight,
 		}
 	}
@@ -95,7 +96,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 			log.Fatal("Error converting string to int", err)
 		}
 
-		graph.addEdge(Edge{from, to, weight})
+		graph.AddEdge(graphs.Edge{Start: from, End: to, Weight: weight})
 	}
 	g = graph
 
@@ -134,7 +135,7 @@ func unregisterWorker(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Worker: " + oldWorker.Address + " successfully unregistered!")
 }
 
-func distributeGraph(graph *Graph) {
+func distributeGraph(graph *graphs.Graph) {
 	// Distribute graph among workers
 	var workerId int
 	if len(workers) == 0 {
@@ -148,7 +149,7 @@ func distributeGraph(graph *Graph) {
 	}
 }
 
-func sendGraphToWorker(graph Graph, worker *worker) error {
+func sendGraphToWorker(graph graphs.Graph, worker *worker) error {
 	options := grequests.RequestOptions{
 		JSON:    graph,
 		Headers: map[string]string{"Content-Type": "application/json"},

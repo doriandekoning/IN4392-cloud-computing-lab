@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/doriandekoning/IN4392-cloud-computing-lab/graphs"
 	"github.com/gorilla/mux"
 
 	"github.com/levigross/grequests"
@@ -33,7 +34,7 @@ type worker struct {
 }
 
 var conf Config
-var graph Graph
+var graph graphs.Graph
 
 func main() {
 	err := envconfig.Init(&conf)
@@ -98,7 +99,7 @@ func getSubProblem(w http.ResponseWriter, r *http.Request) {
 	bodyBytes, _ := ioutil.ReadAll(r.Body)
 	type payload struct {
 		workers []worker
-		nodes   []Node
+		nodes   []graphs.Node
 	}
 	actualPayload := payload{}
 	json.Unmarshal(bodyBytes, &actualPayload)
@@ -115,12 +116,12 @@ func getOwnURL() string {
 func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 	b, _ := ioutil.ReadAll(r.Body)
 	err := json.Unmarshal(b, &graph)
-	algorithm := Pagerank{}
+	algorithm := graphs.Pagerank{}
 	if err != nil {
 		log.Fatal("Error unmashalling graph", err)
 	}
 	for _, node := range graph.Nodes {
-		node.graph = &graph
+		node.Graph = &graph
 	}
 	step := 0
 outerloop:
