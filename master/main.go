@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -9,8 +10,13 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/gorilla/mux"
 	"github.com/levigross/grequests"
 )
@@ -24,7 +30,30 @@ type worker struct {
 
 var workers []*worker
 
+var sess *session.Session
+var workerStartupScript string
+var logs []string
+
 func main() {
+
+	var err error
+
+	sess, err = session.NewSession(&aws.Config{
+		Region:      aws.String("us-east-1"),
+		Credentials: credentials.NewSharedCredentials("", "IN4392"),
+	})
+
+	if err != nil {
+		log.Fatal("Error", err)
+	}
+
+	workerStartupScript, err = readUsserDataScriptFileAndEncode()
+	if err != nil {
+		log.Println(err)
+	}
+
+	// TODO only start worker when there is a request? or dynamically start and stop them
+	startNewWorker()
 
 	router := mux.NewRouter()
 	router.Use(loggingMiddleWare)
@@ -38,13 +67,44 @@ func main() {
 
 }
 
-func GetHealth(w http.ResponseWriter, r *http.Request) {
+func startNewWorker() {
 
+	// Create new EC2 client
+	svc := ec2.New(sess)
+
+	runResult, err := svc.RunInstances(&ec2.RunInstancesInput{
+		ImageId:      aws.String("ami-07d3c94f64ec71332"),
+		InstanceType: aws.String("t2.micro"),
+		MinCount:     aws.Int64(1),
+		MaxCount:     aws.Int64(1),
+		UserData:     aws.String(workerStartupScript),
+	})
+
+	if err != nil {
+		log.Println("Could not create instance", err)
+		return
+	} else {
+		log.Println(runResult)
+	}
+}
+
+func readUsserDataScriptFileAndEncode() (string, error) {
+	f, err := ioutil.ReadFile("user_data.sh")
+	if err != nil {
+		return "", err
+	}
+	userDataScript := base64.URLEncoding.EncodeToString(f)
+	return userDataScript, nil
+}
+
+func GetHealth(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, strings.Join(logs, "\n"))
 }
 
 func loggingMiddleWare(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Println("[" + r.RequestURI + "]")
+		logs = append(logs, "["+r.RequestURI+"]")
 		next.ServeHTTP(w, r)
 	})
 }
