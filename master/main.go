@@ -44,6 +44,7 @@ func GetHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func loggingMiddleWare(next http.Handler) http.Handler {
+	//TODO disalbe logs for health
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Println("[" + r.RequestURI + "]")
 		next.ServeHTTP(w, r)
@@ -132,12 +133,12 @@ func distributeGraph(graph *Graph) {
 	}
 }
 
-func sendGraphToWorker(subGraph Graph, worker *worker) error {
+func sendGraphToWorker(graph Graph, worker *worker) error {
 	options := grequests.RequestOptions{
-		JSON:    subGraph,
+		JSON:    graph,
 		Headers: map[string]string{"Content-Type": "application/json"},
 	}
-	_, err := grequests.Post(worker.Address+"/subgraph", &options)
+	_, err := grequests.Post(worker.Address+"/graph", &options)
 	if err != nil {
 		return err
 	}

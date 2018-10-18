@@ -33,7 +33,7 @@ type worker struct {
 }
 
 var conf Config
-var subGraph Graph
+var graph Graph
 
 func main() {
 	err := envconfig.Init(&conf)
@@ -44,7 +44,7 @@ func main() {
 	router := mux.NewRouter()
 	router.Use(loggingMiddleWare)
 	router.HandleFunc("/health", GetHealth)
-	router.HandleFunc("/subgraph", ReceiveGraph).Methods("POST")
+	router.HandleFunc("/graph", ReceiveGraph).Methods("POST")
 
 	register()
 	go checkMasterHealth()
@@ -57,6 +57,7 @@ func GetHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func loggingMiddleWare(next http.Handler) http.Handler {
+	//TODO disalbe logs for health
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Println("[" + r.RequestURI + "]")
 		next.ServeHTTP(w, r)
@@ -113,24 +114,25 @@ func getOwnURL() string {
 
 func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 	b, _ := ioutil.ReadAll(r.Body)
-	err := json.Unmarshal(b, &subGraph)
+	err := json.Unmarshal(b, &graph)
+	algorithm := Pagerank{}
 	if err != nil {
-		log.Fatal("Error unmashalling subgraph", err)
+		log.Fatal("Error unmashalling graph", err)
 	}
-	fmt.Println("Received a subraph with:", len(subGraph.Nodes), " nodes")
-	for _, node := range subGraph.Nodes {
-		node.graph = &subGraph
+	for _, node := range graph.Nodes {
+		node.graph = &graph
+		//TODO make dynamic
 		node.Value = 0.33
 	}
 	step := 0
 outerloop:
 	for true {
 		step++
-		for _, node := range subGraph.Nodes {
-			node.DoStep()
+		for _, node := range graph.Nodes {
+			algorithm.Step(node)
 		}
 
-		for _, node := range subGraph.Nodes {
+		for _, node := range graph.Nodes {
 			if !node.VoteToHalt {
 				continue outerloop
 			}
@@ -138,6 +140,9 @@ outerloop:
 		break
 	}
 
+	for _, node := range graph.Nodes {
+		fmt.Printf("Final val for node %d: %f\n", node.Id, node.Value)
+	}
 }
 
 func checkMasterHealth() {
