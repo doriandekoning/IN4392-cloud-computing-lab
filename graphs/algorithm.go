@@ -1,26 +1,28 @@
 package graphs
 
 import (
+	"fmt"
 	"math"
 )
 
 type AlgorithmInterface interface {
 	Initialize()
-	Step(n *Node)
+	Step(n *Node, step int)
 }
 
-type Pagerank struct {
+type PagerankInstance struct {
 	//Implement AlgorithmInterface
 	AlgorithmInterface
 	Graph *Graph
 }
 
-func (instance *Pagerank) Initialize() {
+func (instance *PagerankInstance) Initialize() {
 
 }
 
 //TODO check if we can pass the step variable to this function
-func (instance *Pagerank) Step(n *Node, step int) {
+func (instance *PagerankInstance) Step(n *Node, step int) {
+	fmt.Println("Runing pagerenakxx")
 	//For now pagerank according to https://kowshik.github.io/JPregel/pregel_paper.pdf
 	if step >= 1 {
 		sum := 0.0
@@ -52,20 +54,20 @@ func (instance *Pagerank) Step(n *Node, step int) {
 
 }
 
-type SortestPath struct {
+type SortestPathInstance struct {
 	//implement AlgorithmInterface
 	AlgorithmInterface
 	Graph    *Graph
 	SourceID int
 }
 
-func (instance *SortestPath) Initialize() {
+func (instance *SortestPathInstance) Initialize() {
 	for _, n := range instance.Graph.Nodes {
 		n.Value = math.MaxFloat64
 	}
 }
 
-func (instance *SortestPath) Step(n *Node, step int) {
+func (instance *SortestPathInstance) Step(n *Node, step int) {
 	// Set mindist to max int (int with all bits 1 except the first)
 	minDist := math.MaxFloat64
 	if n.Id == instance.SourceID {

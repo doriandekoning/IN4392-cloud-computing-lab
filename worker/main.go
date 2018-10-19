@@ -108,9 +108,20 @@ func getOwnURL() string {
 
 func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 	b, _ := ioutil.ReadAll(r.Body)
+	algorithm := r.URL.Query().Get("algorithm")
 	err := json.Unmarshal(b, &graph)
-	algorithm := graphs.SortestPath{Graph: &graph}
-	algorithm.Initialize()
+	var instance graphs.AlgorithmInterface
+	switch algorithm {
+	case "pagerank":
+		instance = &graphs.PagerankInstance{Graph: &graph}
+	case "shortestpath":
+		instance = &graphs.SortestPathInstance{Graph: &graph}
+	default:
+		fmt.Println("Algorithm not found")
+		return
+	}
+
+	instance.Initialize()
 	if err != nil {
 		log.Fatal("Error unmashalling graph", err)
 	}
@@ -121,7 +132,7 @@ func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 outerloop:
 	for true {
 		for _, node := range graph.Nodes {
-			algorithm.Step(node, step)
+			instance.Step(node, step)
 		}
 		step++
 

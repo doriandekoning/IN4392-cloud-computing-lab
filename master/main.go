@@ -46,8 +46,7 @@ func GetHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func ProcessGraph(w http.ResponseWriter, r *http.Request) {
-	//TODO give float weights to edges
-
+	algorithm := r.URL.Query().Get("algorithm")
 	csvReader := csv.NewReader(r.Body)
 	//Parse first line with vertex weights
 	line, err := csvReader.Read()
@@ -94,7 +93,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	g = graph
 
 	//Asynchronously distribute the graph
-	go distributeGraph(&graph)
+	go distributeGraph(&graph, algorithm)
 }
 
 func registerWorker(w http.ResponseWriter, r *http.Request) {
@@ -128,24 +127,25 @@ func unregisterWorker(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Worker: " + oldWorker.Address + " successfully unregistered!")
 }
 
-func distributeGraph(graph *graphs.Graph) {
+func distributeGraph(graph *graphs.Graph, algorithm string) {
 	// Distribute graph among workers
-	var workerId int
+	var workerID int
 	if len(workers) == 0 {
 		log.Fatal("No workers available")
 		//TODO determine to which worker to send node (for now to first free worker)
-		workerId = 0
+		workerID = 0
 	}
-	err := sendGraphToWorker(*graph, workers[workerId])
+	err := sendGraphToWorker(*graph, workers[workerID], algorithm)
 	if err != nil {
-		fmt.Println("Cannot distributes graph to: " + workers[workerId].Address)
+		fmt.Println("Cannot distributes graph to: " + workers[workerID].Address)
 	}
 }
 
-func sendGraphToWorker(graph graphs.Graph, worker *worker) error {
+func sendGraphToWorker(graph graphs.Graph, worker *worker, algorithm string) error {
 	options := grequests.RequestOptions{
 		JSON:    graph,
 		Headers: map[string]string{"Content-Type": "application/json"},
+		Params:  map[string]string{"algorithm": algorithm},
 	}
 	_, err := grequests.Post(worker.Address+"/graph", &options)
 	if err != nil {
