@@ -17,12 +17,13 @@ type PagerankInstance struct {
 }
 
 func (instance *PagerankInstance) Initialize() {
-
+	for _, node := range instance.Graph.Nodes {
+		node.Active = true
+	}
 }
 
 //TODO check if we can pass the step variable to this function
 func (instance *PagerankInstance) Step(n *Node, step int) {
-	fmt.Println("Runing pagerenakxx")
 	//For now pagerank according to https://kowshik.github.io/JPregel/pregel_paper.pdf
 	if step >= 1 {
 		sum := 0.0
@@ -49,7 +50,7 @@ func (instance *PagerankInstance) Step(n *Node, step int) {
 			instance.Graph.Nodes[outgoingEdge.End].ReceiveMessage(m)
 		}
 	} else {
-		n.VotedToHalt = true
+		n.VoteToHalt()
 	}
 
 }
@@ -64,6 +65,7 @@ type SortestPathInstance struct {
 func (instance *SortestPathInstance) Initialize() {
 	for _, n := range instance.Graph.Nodes {
 		n.Value = math.MaxFloat64
+		n.Active = true
 	}
 }
 

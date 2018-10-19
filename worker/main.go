@@ -132,12 +132,14 @@ func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 outerloop:
 	for true {
 		for _, node := range graph.Nodes {
-			instance.Step(node, step)
+			if node.Active {
+				instance.Step(node, step)
+			}
 		}
 		step++
 
 		for _, node := range graph.Nodes {
-			if !node.VotedToHalt {
+			if node.Active {
 				continue outerloop
 			}
 		}

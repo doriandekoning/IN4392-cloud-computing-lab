@@ -19,7 +19,7 @@ type Node struct {
 	IncomingEdges []*Edge
 	OutgoingEdges []*Edge
 	Graph         *Graph
-	VotedToHalt   bool
+	Active        bool
 	//TODO (Not sure if this is only used for pagerank or all algorithms)
 	//therefore we might not want to store this here but in a seperate splice based on node id
 	Value float64
@@ -56,11 +56,11 @@ func (g Graph) AddEdge(e Edge) {
 func (n *Node) VoteToHalt() {
 	for _, incomingEdge := range n.IncomingEdges {
 		if len(incomingEdge.Messages) > 0 {
-			n.VotedToHalt = false
+			n.Active = true
 			return
 		}
 	}
-	n.VotedToHalt = true
+	n.Active = false
 }
 
 func (n Node) GetMessages(step int) []*Message {
