@@ -1,5 +1,7 @@
 package graphs
 
+import uuid "github.com/satori/go.uuid"
+
 type Message struct {
 	From    int
 	To      int
@@ -26,6 +28,7 @@ type Node struct {
 }
 
 type Graph struct {
+	Id    uuid.UUID
 	Nodes []*Node
 }
 

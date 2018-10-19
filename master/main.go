@@ -14,6 +14,7 @@ import (
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/graphs"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/middleware"
 	"github.com/levigross/grequests"
+	uuid "github.com/satori/go.uuid"
 
 	"github.com/gorilla/mux"
 )
@@ -55,6 +56,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	//Init graph
 	graph := graphs.Graph{Nodes: make([]*graphs.Node, len(line))}
+	graph.Id = uuid.Must(uuid.NewV4())
 
 	//Init all nodes
 	for index, weight := range line {
@@ -94,6 +96,9 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 
 	//Asynchronously distribute the graph
 	go distributeGraph(&graph, algorithm)
+	idBytes, _ := graph.Id.MarshalText()
+	w.Write(idBytes)
+
 }
 
 func registerWorker(w http.ResponseWriter, r *http.Request) {

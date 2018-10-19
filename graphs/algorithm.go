@@ -1,7 +1,6 @@
 package graphs
 
 import (
-	"fmt"
 	"math"
 )
 
