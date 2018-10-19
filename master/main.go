@@ -89,7 +89,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 			log.Fatal("Error converting string to int", err)
 		}
 
-		graph.AddEdge(graphs.Edge{Start: from, End: to, Weight: float32(weight)})
+		graph.AddEdge(graphs.Edge{Start: from, End: to, Weight: weight})
 	}
 	g = graph
 

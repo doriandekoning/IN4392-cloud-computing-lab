@@ -1,7 +1,6 @@
 package graphs
 
 import (
-	"fmt"
 	"math"
 )
 
@@ -72,9 +71,7 @@ func (instance *SortestPath) Step(n *Node, step int) {
 	if n.Id == instance.SourceID {
 		minDist = 0
 	}
-	fmt.Println("Doing step", step)
 	for _, message := range n.GetMessages(step) {
-		fmt.Println("Processed message")
 		minDist = math.Min(minDist, message.Message)
 		//Remove first message
 		// incomingEdge.Messages = incomingEdge.Messages[1:]
@@ -83,7 +80,6 @@ func (instance *SortestPath) Step(n *Node, step int) {
 	if minDist < n.Value {
 		n.Value = minDist
 		for _, outgoingEdge := range n.OutgoingEdges {
-			fmt.Println(minDist + outgoingEdge.Weight)
 			//TODO make function that builds message and stuff
 			m := Message{
 				From:    n.Id,
