@@ -11,6 +11,8 @@ import (
 
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/graphs"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/middleware"
+	"github.com/doriandekoning/IN4392-cloud-computing-lab/util"
+
 	"github.com/gorilla/mux"
 
 	"github.com/levigross/grequests"
@@ -82,7 +84,8 @@ func unregister() {
 	}
 	_, err := grequests.Delete(getMasterURL()+"/worker/unregister", &options)
 	if err != nil {
-		log.Fatal("Unable to unregister: ", err)
+		fmt.Println("Unable to register, error:", err)
+		return
 	}
 	fmt.Println("Sucessfully unregistered")
 
@@ -110,6 +113,11 @@ func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 	b, _ := ioutil.ReadAll(r.Body)
 	algorithm := r.URL.Query().Get("algorithm")
 	err := json.Unmarshal(b, &graph)
+	if err != nil {
+		util.BadRequest(w, "Cannot unmarshal graph", err)
+		return
+	}
+
 	var instance graphs.AlgorithmInterface
 	switch algorithm {
 	case "pagerank":
@@ -122,9 +130,7 @@ func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 	}
 
 	instance.Initialize()
-	if err != nil {
-		log.Fatal("Error unmashalling graph", err)
-	}
+
 	for _, node := range graph.Nodes {
 		node.Graph = &graph
 	}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/graphs"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/middleware"
+	"github.com/doriandekoning/IN4392-cloud-computing-lab/util"
 	"github.com/levigross/grequests"
 	uuid "github.com/satori/go.uuid"
 
@@ -52,7 +53,8 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	//Parse first line with vertex weights
 	line, err := csvReader.Read()
 	if err == io.EOF {
-		log.Fatalf("Cannot parse node weights")
+		util.BadRequest(w, "Provided csv file is empty", err)
+		return
 	}
 	//Init graph
 	graph := graphs.Graph{Nodes: make([]*graphs.Node, len(line))}
@@ -62,7 +64,8 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	for index, weight := range line {
 		parsedWeight, err := strconv.ParseFloat(weight, 64)
 		if err != nil {
-			log.Fatalf("Error reading edge weight %s", weight)
+			util.BadRequest(w, fmt.Sprint("Cannot convert edge weigth %s to float", weight), err)
+			return
 		}
 		graph.Nodes[index] = &graphs.Node{
 			Id:            index,
@@ -72,32 +75,44 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	//Parse edges
+	var lineNumber int
 	for {
+		lineNumber++
 		line, err := csvReader.Read()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			log.Fatal("Error parsing csv line")
+			util.BadRequest(w, fmt.Sprintf("Error reading line:%d", lineNumber), err)
+			return
 		}
 		if len(line) != 3 {
-			log.Fatal("Line length too long")
+			util.BadRequest(w, fmt.Sprint(w, "To much comma seperated parts in:%d", lineNumber), nil)
+			return
 		}
 		from, err1 := strconv.Atoi(line[0])
 		to, err2 := strconv.Atoi(line[1])
 		weight, err3 := strconv.ParseFloat(line[2], 32)
 		if err1 != nil || err2 != nil || err3 != nil {
-			log.Fatal("Error converting string to int", err)
+			util.BadRequest(w, fmt.Sprintf("Error reading line:%d", lineNumber), err1)
+			return
 		}
 
 		graph.AddEdge(graphs.Edge{Start: from, End: to, Weight: weight})
+		lineNumber++
 	}
 	g = graph
 
+	if len(workers) == 0 {
+		util.InternalServerError(w, "No workers found", nil)
+		return
+	}
 	//Asynchronously distribute the graph
 	go distributeGraph(&graph, algorithm)
+	//Write id to response
 	idBytes, _ := graph.Id.MarshalText()
 	w.Write(idBytes)
+	w.WriteHeader(http.StatusAccepted)
 
 }
 
@@ -107,7 +122,8 @@ func registerWorker(w http.ResponseWriter, r *http.Request) {
 	b, _ := ioutil.ReadAll(r.Body)
 	err := json.Unmarshal(b, &newWorker)
 	if err != nil {
-		log.Fatal("Error", err)
+		util.BadRequest(w, "Error unmarshaling body", err)
+		return
 	}
 	workers = append(workers, &newWorker)
 	fmt.Println("Worker: " + newWorker.Address + " successfully registered!")
@@ -118,7 +134,8 @@ func unregisterWorker(w http.ResponseWriter, r *http.Request) {
 	bodyBytes, _ := ioutil.ReadAll(r.Body)
 	err := json.Unmarshal(bodyBytes, &oldWorker)
 	if err != nil {
-		log.Fatal("Error", err)
+		util.BadRequest(w, "Error unmarshalling body", err)
+		return
 	}
 	for index, worker := range workers {
 		if worker.Address == oldWorker.Address {
@@ -135,11 +152,7 @@ func unregisterWorker(w http.ResponseWriter, r *http.Request) {
 func distributeGraph(graph *graphs.Graph, algorithm string) {
 	// Distribute graph among workers
 	var workerID int
-	if len(workers) == 0 {
-		log.Fatal("No workers available")
-		//TODO determine to which worker to send node (for now to first free worker)
-		workerID = 0
-	}
+	//TODO determine to which worker to send node (for now to first free worker)
 	err := sendGraphToWorker(*graph, workers[workerID], algorithm)
 	if err != nil {
 		fmt.Println("Cannot distributes graph to: " + workers[workerID].Address)
