@@ -128,7 +128,7 @@ func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 	case "pagerank":
 		instance = &graphs.PagerankInstance{Graph: &graph, MaxSteps: maxSteps}
 	case "shortestpath":
-		instance = &graphs.SortestPathInstance{Graph: &graph}
+		instance = &graphs.ShortestPathInstance{Graph: &graph}
 	default:
 		fmt.Println("Algorithm not found")
 		return

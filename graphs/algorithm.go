@@ -55,21 +55,21 @@ func (instance *PagerankInstance) Step(n *Node, step int) {
 
 }
 
-type SortestPathInstance struct {
+type ShortestPathInstance struct {
 	//implement AlgorithmInterface
 	AlgorithmInterface
 	Graph    *Graph
 	SourceID int
 }
 
-func (instance *SortestPathInstance) Initialize() {
+func (instance *ShortestPathInstance) Initialize() {
 	for _, n := range instance.Graph.Nodes {
 		n.Value = math.MaxFloat64
 		n.Active = true
 	}
 }
 
-func (instance *SortestPathInstance) Step(n *Node, step int) {
+func (instance *ShortestPathInstance) Step(n *Node, step int) {
 	// Set mindist to max int (int with all bits 1 except the first)
 	minDist := math.MaxFloat64
 	if n.Id == instance.SourceID {
