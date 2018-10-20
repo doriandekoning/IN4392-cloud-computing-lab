@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -151,10 +153,17 @@ outerloop:
 		}
 		break
 	}
-
+	buf := new(bytes.Buffer)
+	csvWriter := csv.NewWriter(buf)
+	values := []string{}
 	for _, node := range graph.Nodes {
-		fmt.Printf("Final val for node %d: %f\n", node.Id, node.Value)
+		values = append(values, strconv.FormatFloat(node.Value, 'f', 6, 64))
 	}
+	csvWriter.Write(values)
+	csvWriter.Flush()
+	//TODO send to storage
+	fmt.Println(buf.String())
+
 }
 
 func checkMasterHealth() {
