@@ -112,7 +112,12 @@ func getOwnURL() string {
 func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 	b, _ := ioutil.ReadAll(r.Body)
 	algorithm := r.URL.Query().Get("algorithm")
-	err := json.Unmarshal(b, &graph)
+	maxSteps, err := strconv.Atoi(r.URL.Query().Get("maxsteps"))
+	if err != nil || maxSteps < 1 {
+		util.BadRequest(w, "Max steps is not a valid number: "+r.URL.Query().Get("maxsteps"), nil)
+		return
+	}
+	err = json.Unmarshal(b, &graph)
 	if err != nil {
 		util.BadRequest(w, "Cannot unmarshal graph", err)
 		return
@@ -121,7 +126,7 @@ func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 	var instance graphs.AlgorithmInterface
 	switch algorithm {
 	case "pagerank":
-		instance = &graphs.PagerankInstance{Graph: &graph}
+		instance = &graphs.PagerankInstance{Graph: &graph, MaxSteps: maxSteps}
 	case "shortestpath":
 		instance = &graphs.SortestPathInstance{Graph: &graph}
 	default:

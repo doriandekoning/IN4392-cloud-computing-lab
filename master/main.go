@@ -48,7 +48,6 @@ func GetHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func ProcessGraph(w http.ResponseWriter, r *http.Request) {
-	algorithm := r.URL.Query().Get("algorithm")
 	csvReader := csv.NewReader(r.Body)
 	//Parse first line with vertex weights
 	line, err := csvReader.Read()
@@ -109,7 +108,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//Asynchronously distribute the graph
-	go distributeGraph(&graph, algorithm)
+	go distributeGraph(&graph, r.URL.Query())
 	//Write id to response
 	idBytes, _ := graph.Id.MarshalText()
 	w.Write(idBytes)
@@ -150,21 +149,21 @@ func unregisterWorker(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Worker: " + oldWorker.Address + " successfully unregistered!")
 }
 
-func distributeGraph(graph *graphs.Graph, algorithm string) {
+func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 	// Distribute graph among workers
 	var workerID int
 	//TODO determine to which worker to send node (for now to first free worker)
-	err := sendGraphToWorker(*graph, workers[workerID], algorithm)
+	err := sendGraphToWorker(*graph, workers[workerID], parameters)
 	if err != nil {
 		fmt.Println("Cannot distributes graph to: " + workers[workerID].Address)
 	}
 }
 
-func sendGraphToWorker(graph graphs.Graph, worker *worker, algorithm string) error {
+func sendGraphToWorker(graph graphs.Graph, worker *worker, parameters map[string][]string) error {
 	options := grequests.RequestOptions{
 		JSON:    graph,
 		Headers: map[string]string{"Content-Type": "application/json"},
-		Params:  map[string]string{"algorithm": algorithm},
+		Params:  paramsMapToRequestParamsMap(parameters),
 	}
 	_, err := grequests.Post(worker.Address+"/graph", &options)
 	if err != nil {
@@ -185,4 +184,12 @@ func getWorkersHealth() {
 		}
 		time.Sleep(15 * time.Second)
 	}
+}
+
+func paramsMapToRequestParamsMap(original map[string][]string) map[string]string {
+	retval := map[string]string{}
+	for k, v := range original {
+		retval[k] = v[0]
+	}
+	return retval
 }

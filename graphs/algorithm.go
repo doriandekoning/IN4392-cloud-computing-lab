@@ -12,7 +12,8 @@ type AlgorithmInterface interface {
 type PagerankInstance struct {
 	//Implement AlgorithmInterface
 	AlgorithmInterface
-	Graph *Graph
+	MaxSteps int
+	Graph    *Graph
 }
 
 func (instance *PagerankInstance) Initialize() {
@@ -37,7 +38,7 @@ func (instance *PagerankInstance) Step(n *Node, step int) {
 
 		n.Value = (0.15 / float64(len(instance.Graph.Nodes))) + (0.85 * sum)
 	}
-	if step < 3 {
+	if step < instance.MaxSteps {
 		// Send out sum of tentative pagerank divided by number of outgoing edges
 		for _, outgoingEdge := range n.OutgoingEdges {
 			m := Message{
