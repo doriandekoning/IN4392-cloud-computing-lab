@@ -79,6 +79,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	for {
 		lineNumber++
 		line, err := csvReader.Read()
+
 		if err == io.EOF {
 			break
 		}

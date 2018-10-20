@@ -14,9 +14,7 @@ import (
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/graphs"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/middleware"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/util"
-
 	"github.com/gorilla/mux"
-
 	"github.com/levigross/grequests"
 	"github.com/vrischmann/envconfig"
 )
@@ -73,7 +71,7 @@ func register() {
 			fmt.Println("Successfully registered")
 			break
 		}
-		fmt.Println("Unable to register")
+		fmt.Println("Unable to register", err)
 		//Try again in 10 sec
 		time.Sleep(10 * time.Second)
 	}
