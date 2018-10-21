@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -9,7 +11,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
+	"github.com/doriandekoning/IN4392-cloud-computing-lab/graphs"
+	"github.com/doriandekoning/IN4392-cloud-computing-lab/middleware"
+	"github.com/doriandekoning/IN4392-cloud-computing-lab/util"
 	"github.com/gorilla/mux"
 	"github.com/levigross/grequests"
 	"github.com/vrischmann/envconfig"
@@ -33,7 +37,7 @@ type worker struct {
 }
 
 var conf Config
-var subGraph Graph
+var graph graphs.Graph
 
 func main() {
 	err := envconfig.Init(&conf)
@@ -42,10 +46,9 @@ func main() {
 	}
 
 	router := mux.NewRouter()
-	router.Use(loggingMiddleWare)
+	router.Use(middleware.LoggingMiddleWare)
 	router.HandleFunc("/health", GetHealth)
-	router.HandleFunc("/subgraph", ReceiveSubgraph).Methods("POST")
-	router.HandleFunc("/message", ReceiveMessage).Methods("POST")
+	router.HandleFunc("/graph", ReceiveGraph).Methods("POST")
 
 	register()
 	go checkMasterHealth()
@@ -55,13 +58,6 @@ func main() {
 
 func GetHealth(w http.ResponseWriter, r *http.Request) {
 
-}
-
-func loggingMiddleWare(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Println("[" + r.RequestURI + "]")
-		next.ServeHTTP(w, r)
-	})
 }
 
 func register() {
@@ -86,10 +82,10 @@ func unregister() {
 		JSON:    map[string]string{"address": getOwnURL()},
 		Headers: map[string]string{"Content-Type": "application/json"},
 	}
-	spew.Dump(options)
 	_, err := grequests.Delete(getMasterURL()+"/worker/unregister", &options)
 	if err != nil {
-		log.Fatal("Unable to unregister: ", err)
+		fmt.Println("Unable to register, error:", err)
+		return
 	}
 	fmt.Println("Sucessfully unregistered")
 
@@ -99,7 +95,7 @@ func getSubProblem(w http.ResponseWriter, r *http.Request) {
 	bodyBytes, _ := ioutil.ReadAll(r.Body)
 	type payload struct {
 		workers []worker
-		nodes   []Node
+		nodes   []graphs.Node
 	}
 	actualPayload := payload{}
 	json.Unmarshal(bodyBytes, &actualPayload)
@@ -113,13 +109,63 @@ func getOwnURL() string {
 	return conf.Own.Address + ":" + strconv.Itoa(conf.Own.Port)
 }
 
-func ReceiveSubgraph(w http.ResponseWriter, r *http.Request) {
+func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 	b, _ := ioutil.ReadAll(r.Body)
-	err := json.Unmarshal(b, &subGraph)
-	if err != nil {
-		log.Fatal("Error unmashalling subgraph", err)
+	algorithm := r.URL.Query().Get("algorithm")
+	maxSteps, err := strconv.Atoi(r.URL.Query().Get("maxsteps"))
+	if err != nil || maxSteps < 1 {
+		util.BadRequest(w, "Max steps is not a valid number: "+r.URL.Query().Get("maxsteps"), nil)
+		return
 	}
-	fmt.Println("Received a subraph with:", len(subGraph.Nodes), " nodes")
+	err = json.Unmarshal(b, &graph)
+	if err != nil {
+		util.BadRequest(w, "Cannot unmarshal graph", err)
+		return
+	}
+
+	var instance graphs.AlgorithmInterface
+	switch algorithm {
+	case "pagerank":
+		instance = &graphs.PagerankInstance{Graph: &graph, MaxSteps: maxSteps}
+	case "shortestpath":
+		instance = &graphs.ShortestPathInstance{Graph: &graph}
+	default:
+		fmt.Println("Algorithm not found")
+		return
+	}
+
+	instance.Initialize()
+
+	for _, node := range graph.Nodes {
+		node.Graph = &graph
+	}
+	step := 0
+outerloop:
+	for true {
+		for _, node := range graph.Nodes {
+			if node.Active {
+				instance.Step(node, step)
+			}
+		}
+		step++
+
+		for _, node := range graph.Nodes {
+			if node.Active {
+				continue outerloop
+			}
+		}
+		break
+	}
+	buf := new(bytes.Buffer)
+	csvWriter := csv.NewWriter(buf)
+	values := []string{}
+	for _, node := range graph.Nodes {
+		values = append(values, strconv.FormatFloat(node.Value, 'f', 6, 64))
+	}
+	csvWriter.Write(values)
+	csvWriter.Flush()
+	//TODO send to storage
+	fmt.Println(buf.String())
 
 }
 
@@ -129,28 +175,7 @@ func checkMasterHealth() {
 		if err != nil {
 			fmt.Println("Master seems to be offline")
 			register()
-		} else {
-			fmt.Println("Master seems healty")
 		}
 		time.Sleep(10 * time.Second)
 	}
-}
-
-func ReceiveMessage(w http.ResponseWriter, r *http.Request) {
-
-	var message = Message{}
-	b, _ := ioutil.ReadAll(r.Body)
-	err := json.Unmarshal(b, &message)
-	if err != nil {
-		log.Fatal("Received bad message: ", err)
-	}
-	// Add message in the message queue of the corresponding edge
-	// TODO improve datastructures keeping messages (maybe a 2d map [sender][receiver] with an array of messages? so we can do this in constant time?)
-	for _, node := range subGraph.Nodes {
-		if node.Id == message.To {
-			node.ReceiveMessage(message)
-			break
-		}
-	}
-
 }
