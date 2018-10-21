@@ -7,3 +7,8 @@ This is the master node
 
 # Run 
 `./bin/master`
+
+# Deploy
+`cd  ~/go/src/github.com/doriandekoning/IN4392-cloud-computing-lab/master`
+`go build -o bin/master`
+`sudo systemctl restart master`

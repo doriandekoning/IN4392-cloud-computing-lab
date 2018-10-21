@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -23,8 +22,9 @@ type Config struct {
 		Address string
 	}
 	Own struct {
-		Port    int
-		Address string
+		Port       int
+		Address    string
+		Instanceid string `envconfig:"optional"`
 	}
 }
 
@@ -35,8 +35,6 @@ type worker struct {
 
 var conf Config
 var subGraph Graph
-
-var logs []string
 
 func main() {
 	err := envconfig.Init(&conf)
@@ -57,13 +55,12 @@ func main() {
 }
 
 func GetHealth(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, strings.Join(logs, "\n"))
+
 }
 
 func loggingMiddleWare(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Println("[" + r.RequestURI + "]")
-		logs = append(logs, "["+r.RequestURI+"]")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -71,13 +68,12 @@ func loggingMiddleWare(next http.Handler) http.Handler {
 func register() {
 	for {
 		options := grequests.RequestOptions{
-			JSON:    map[string]string{"address": getOwnURL()},
+			JSON:    map[string]string{"address": getOwnURL(), "instanceId": conf.Own.Instanceid},
 			Headers: map[string]string{"Content-Type": "application/json"},
 		}
 		_, err := grequests.Post(getMasterURL()+"/worker/register", &options)
 		if err == nil {
 			fmt.Println("Successfully registered")
-			logs = append(logs, "[Successfully registered]")
 			break
 		}
 		fmt.Println("Unable to register", err)
@@ -125,7 +121,6 @@ func ReceiveSubgraph(w http.ResponseWriter, r *http.Request) {
 		log.Fatal("Error unmashalling subgraph", err)
 	}
 	fmt.Println("Received a subraph with:", len(subGraph.Nodes), " nodes")
-	logs = append(logs, ("Received a subraph with:" + strconv.Itoa(len(subGraph.Nodes)) + " nodes"))
 }
 
 func checkMasterHealth() {
@@ -133,11 +128,9 @@ func checkMasterHealth() {
 		_, err := grequests.Get(getMasterURL()+"/health", nil)
 		if err != nil {
 			fmt.Println("Master seems to be offline")
-			logs = append(logs, "[Master seems to be offline]")
 			register()
 		} else {
 			fmt.Println("Master seems healty")
-			logs = append(logs, "[Master seems healty]")
 		}
 		time.Sleep(10 * time.Second)
 	}

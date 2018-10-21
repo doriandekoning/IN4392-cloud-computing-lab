@@ -10,13 +10,11 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/gorilla/mux"
 	"github.com/levigross/grequests"
 )
@@ -24,15 +22,15 @@ import (
 var g Graph
 
 type worker struct {
-	Address string
-	Healty  bool
+	Address    string
+	InstanceId string
+	Healty     bool
 }
 
 var workers []*worker
 
 var sess *session.Session
 var workerStartupScript string
-var logs []string
 
 func main() {
 
@@ -52,12 +50,11 @@ func main() {
 		log.Println(err)
 	}
 
-	// TODO only start worker when there is a request? or dynamically start and stop them
-	startNewWorker()
-
 	router := mux.NewRouter()
 	router.Use(loggingMiddleWare)
 	router.HandleFunc("/health", GetHealth).Methods("GET")
+	router.HandleFunc("/killworkers", KillWorkersRequest).Methods("GET")
+	router.HandleFunc("/addworker", AddWorkerRequest).Methods("GET")
 	router.HandleFunc("/processgraph", ProcessGraph).Methods("POST")
 	router.HandleFunc("/worker/register", registerWorker).Methods("POST")
 	router.HandleFunc("/worker/unregister", unregisterWorker).Methods("DELETE")
@@ -65,27 +62,6 @@ func main() {
 	go getWorkersHealth()
 	log.Fatal(http.ListenAndServe(":8000", router))
 
-}
-
-func startNewWorker() {
-
-	// Create new EC2 client
-	svc := ec2.New(sess)
-
-	runResult, err := svc.RunInstances(&ec2.RunInstancesInput{
-		ImageId:      aws.String("ami-07d3c94f64ec71332"),
-		InstanceType: aws.String("t2.micro"),
-		MinCount:     aws.Int64(1),
-		MaxCount:     aws.Int64(1),
-		UserData:     aws.String(workerStartupScript),
-	})
-
-	if err != nil {
-		log.Println("Could not create instance", err)
-		return
-	} else {
-		log.Println(runResult)
-	}
 }
 
 func readUsserDataScriptFileAndEncode() (string, error) {
@@ -98,13 +74,28 @@ func readUsserDataScriptFileAndEncode() (string, error) {
 }
 
 func GetHealth(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, strings.Join(logs, "\n"))
+	fmt.Fprintln(w, "Registered workers: "+strconv.Itoa(len(workers)))
+	for _, worker := range workers {
+		fmt.Fprintln(w, worker.Address+" -- "+worker.InstanceId+" -- "+strconv.FormatBool(worker.Healty))
+	}
+}
+
+func KillWorkersRequest(w http.ResponseWriter, r *http.Request) {
+	err := TerminateWorkers(workers)
+	if err == nil {
+		workers = nil
+		fmt.Println("Workers terminated")
+	}
+}
+
+func AddWorkerRequest(w http.ResponseWriter, r *http.Request) {
+	startNewWorker()
+	fmt.Println("New worker started")
 }
 
 func loggingMiddleWare(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Println("[" + r.RequestURI + "]")
-		logs = append(logs, "["+r.RequestURI+"]")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -155,7 +146,7 @@ func registerWorker(w http.ResponseWriter, r *http.Request) {
 		log.Fatal("Error", err)
 	}
 	workers = append(workers, &newWorker)
-	fmt.Println("Worker: " + newWorker.Address + " successfully registered!")
+	fmt.Println("Worker: " + newWorker.InstanceId + " successfully registered!")
 }
 
 func unregisterWorker(w http.ResponseWriter, r *http.Request) {
@@ -173,6 +164,9 @@ func unregisterWorker(w http.ResponseWriter, r *http.Request) {
 			workers = workers[:len(workers)-1]
 			break
 		}
+	}
+	if oldWorker.InstanceId != "" {
+		//TODO terminate worker
 	}
 	fmt.Println("Worker: " + oldWorker.Address + " successfully unregistered!")
 }

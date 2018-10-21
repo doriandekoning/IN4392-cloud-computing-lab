@@ -8,3 +8,9 @@ This is the worker.
 
 # Run 
 `./bin/worker`
+
+
+# Deploy
+`cd  ~/go/src/github.com/doriandekoning/IN4392-cloud-computing-lab/worker`
+`go build -o bin/worker`
+Create a new image in AWS console and update the worker launch template with this new image.
