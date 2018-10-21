@@ -66,12 +66,12 @@ func register() {
 			JSON:    map[string]string{"address": getOwnURL()},
 			Headers: map[string]string{"Content-Type": "application/json"},
 		}
-		_, err := grequests.Post(getMasterURL()+"/worker/register", &options)
-		if err == nil {
+		resp, err := grequests.Post(getMasterURL()+"/worker/register", &options)
+		if err == nil && resp.StatusCode < 300 {
 			fmt.Println("Successfully registered")
 			break
 		}
-		fmt.Println("Unable to register", err)
+		fmt.Println("Unable to register, statuscode: ", resp.StatusCode)
 		//Try again in 10 sec
 		time.Sleep(10 * time.Second)
 	}
@@ -82,9 +82,9 @@ func unregister() {
 		JSON:    map[string]string{"address": getOwnURL()},
 		Headers: map[string]string{"Content-Type": "application/json"},
 	}
-	_, err := grequests.Delete(getMasterURL()+"/worker/unregister", &options)
-	if err != nil {
-		fmt.Println("Unable to register, error:", err)
+	resp, err := grequests.Delete(getMasterURL()+"/worker/unregister", &options)
+	if err != nil && resp.StatusCode >= 300 {
+		fmt.Println("Unable to register, statuscode:", resp.StatusCode)
 		return
 	}
 	fmt.Println("Sucessfully unregistered")

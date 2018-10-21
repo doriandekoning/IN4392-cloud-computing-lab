@@ -22,12 +22,13 @@ import (
 
 var g graphs.Graph
 
-type worker struct {
+type node struct {
 	Address string
-	Healty  bool
+	Healthy bool
 }
 
-var workers []*worker
+var workers []*node
+var storageNodes []*node
 
 func main() {
 
@@ -35,10 +36,11 @@ func main() {
 	router.Use(middleware.LoggingMiddleWare)
 	router.HandleFunc("/health", GetHealth).Methods("GET")
 	router.HandleFunc("/processgraph", ProcessGraph).Methods("POST")
-	router.HandleFunc("/worker/register", registerWorker).Methods("POST")
+	router.HandleFunc("/{nodetype}/register", registerNode).Methods("POST")
+	router.HandleFunc("/storagenode", listStorageNodes).Methods("GET")
 	router.HandleFunc("/worker/unregister", unregisterWorker).Methods("DELETE")
 
-	go getWorkersHealth()
+	go getNodesHealth()
 	log.Fatal(http.ListenAndServe(":8000", router))
 
 }
@@ -116,21 +118,8 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func registerWorker(w http.ResponseWriter, r *http.Request) {
-	var newWorker worker
-
-	b, _ := ioutil.ReadAll(r.Body)
-	err := json.Unmarshal(b, &newWorker)
-	if err != nil {
-		util.BadRequest(w, "Error unmarshaling body", err)
-		return
-	}
-	workers = append(workers, &newWorker)
-	fmt.Println("Worker: " + newWorker.Address + " successfully registered!")
-}
-
 func unregisterWorker(w http.ResponseWriter, r *http.Request) {
-	var oldWorker worker
+	var oldWorker node
 	bodyBytes, _ := ioutil.ReadAll(r.Body)
 	err := json.Unmarshal(bodyBytes, &oldWorker)
 	if err != nil {
@@ -149,6 +138,38 @@ func unregisterWorker(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Worker: " + oldWorker.Address + " successfully unregistered!")
 }
 
+func registerNode(w http.ResponseWriter, r *http.Request) {
+	var newNode node
+	var allNodes *[]*node
+	nodeType := mux.Vars(r)["nodetype"]
+	if nodeType == "storage" {
+		allNodes = &storageNodes
+	} else if nodeType == "worker" {
+		allNodes = &workers
+	} else {
+		util.BadRequest(w, "Nodetype "+nodeType+" is not known", nil)
+		return
+	}
+	b, _ := ioutil.ReadAll(r.Body)
+	err := json.Unmarshal(b, &newNode)
+	if err != nil {
+		util.BadRequest(w, "Error unmarshalling storagenode registration body", err)
+	}
+	var replaced bool
+	for storageNodeIndex, storageNode := range *allNodes {
+		if storageNode.Address == newNode.Address {
+			storageNodes[storageNodeIndex] = &newNode
+			replaced = true
+			break
+		}
+	}
+
+	if !replaced {
+		*allNodes = append(*allNodes, &newNode)
+	}
+	fmt.Println("Storage node sucessfully registered")
+}
+
 func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 	// Distribute graph among workers
 	var workerID int
@@ -159,7 +180,7 @@ func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 	}
 }
 
-func sendGraphToWorker(graph graphs.Graph, worker *worker, parameters map[string][]string) error {
+func sendGraphToWorker(graph graphs.Graph, worker *node, parameters map[string][]string) error {
 	options := grequests.RequestOptions{
 		JSON:    graph,
 		Headers: map[string]string{"Content-Type": "application/json"},
@@ -172,14 +193,14 @@ func sendGraphToWorker(graph graphs.Graph, worker *worker, parameters map[string
 	return nil
 }
 
-func getWorkersHealth() {
+func getNodesHealth() {
 	for {
-		for _, worker := range workers {
-			_, err := grequests.Get(worker.Address+"/health", nil)
+		for _, node := range append(workers, storageNodes...) {
+			_, err := grequests.Get(node.Address+"/health", nil)
 			if err != nil {
-				worker.Healty = false
+				node.Healthy = false
 			} else {
-				worker.Healty = true
+				node.Healthy = true
 			}
 		}
 		time.Sleep(15 * time.Second)
@@ -192,4 +213,17 @@ func paramsMapToRequestParamsMap(original map[string][]string) map[string]string
 		retval[k] = v[0]
 	}
 	return retval
+}
+
+func listStorageNodes(w http.ResponseWriter, r *http.Request) {
+	if storageNodes == nil {
+		w.Write([]byte("{}"))
+	} else {
+		retVal, err := json.Marshal(storageNodes)
+		if err != nil {
+			util.InternalServerError(w, "Cannot marshall nodes", err)
+			return
+		}
+		w.Write(retVal)
+	}
 }
