@@ -14,7 +14,6 @@ func startNewWorker() ([]*ec2.Instance, error) {
 		LaunchTemplate: &ec2.LaunchTemplateSpecification{LaunchTemplateName: aws.String("worker")},
 		MinCount:       aws.Int64(1),
 		MaxCount:       aws.Int64(1),
-		UserData:       aws.String(workerStartupScript), // Logs can be checked in /var/log/cloud-init-output.log
 	})
 
 	if err != nil {

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/base64"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -13,7 +12,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/gorilla/mux"
 	"github.com/levigross/grequests"
@@ -30,22 +28,19 @@ type worker struct {
 var workers []*worker
 
 var sess *session.Session
-var workerStartupScript string
 
 func main() {
 
 	var err error
 
 	sess, err = session.NewSession(&aws.Config{
-		Region:      aws.String("us-east-1"),
-		Credentials: credentials.NewSharedCredentials("", "IN4392"),
+		Region: aws.String("us-east-1"),
 	})
 
 	if err != nil {
 		log.Fatal("Error", err)
 	}
 
-	workerStartupScript, err = readUsserDataScriptFileAndEncode()
 	if err != nil {
 		log.Println(err)
 	}
@@ -62,15 +57,6 @@ func main() {
 	go getWorkersHealth()
 	log.Fatal(http.ListenAndServe(":8000", router))
 
-}
-
-func readUsserDataScriptFileAndEncode() (string, error) {
-	f, err := ioutil.ReadFile("user_data.sh")
-	if err != nil {
-		return "", err
-	}
-	userDataScript := base64.URLEncoding.EncodeToString(f)
-	return userDataScript, nil
 }
 
 func GetHealth(w http.ResponseWriter, r *http.Request) {

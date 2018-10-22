@@ -2,6 +2,14 @@ This is the master node
 # Instal dependencis
 `go get ./..`
 
+# Set environment variables
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+export MASTER_PORT=8000
+export MASTER_ADDRESS=http://localhost
+export OWN_PORT=8888
+export OWN_ADDRESS=http://localhost
+
 # Build
 `go build -o bin/master`
 
@@ -10,5 +18,6 @@ This is the master node
 
 # Deploy
 `cd  ~/go/src/github.com/doriandekoning/IN4392-cloud-computing-lab/master`
+`git pull`
 `go build -o bin/master`
 `sudo systemctl restart master`

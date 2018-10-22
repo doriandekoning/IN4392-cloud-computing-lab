@@ -14,3 +14,5 @@ This is the worker.
 `cd  ~/go/src/github.com/doriandekoning/IN4392-cloud-computing-lab/worker`
 `go build -o bin/worker`
 Create a new image in AWS console and update the worker launch template with this new image.
+Set the default version of the template to the new version
+status can be checked with `sudo systemctl status worker`
