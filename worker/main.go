@@ -86,7 +86,7 @@ func register() {
 
 func unregister() {
 	options := grequests.RequestOptions{
-		JSON:    map[string]string{"address": getOwnURL()},
+		JSON:    map[string]string{"address": getOwnURL(), "instanceId": conf.Own.Instanceid},
 		Headers: map[string]string{"Content-Type": "application/json"},
 	}
 	_, err := grequests.Delete(getMasterURL()+"/worker/unregister", &options)

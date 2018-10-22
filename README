@@ -15,7 +15,7 @@ export LOCAL=true
 ## Worker
 `go build -o bin/worker worker/main.go`
 ## Master
-`go build -o bin/master master/*`
+`go build -o bin/master master/*.go`
 
 # Run 
 `./bin/worker`
@@ -25,6 +25,7 @@ export LOCAL=true
 ## Worker
 `cd  ~/go/src/github.com/doriandekoning/IN4392-cloud-computing-lab`
 `git pull`
+`go get ./worker`
 `go build -o bin/worker worker/main.go`
 Create a new image in AWS console and update the worker launch template with this new image.
 Set the default version of the template to the new version
@@ -32,6 +33,7 @@ status can be checked with `sudo systemctl status worker`
 ## Master
 `cd  ~/go/src/github.com/doriandekoning/IN4392-cloud-computing-lab`
 `git pull`
-`go build -o bin/master master/*`
+`go get ./master`
+`go build -o bin/master master/*.go`
 `sudo systemctl restart master`
 status can be checked with `sudo systemctl status master`
