@@ -7,9 +7,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 )
 
-func startNewWorker() ([]*ec2.Instance, error) {
+func StartNewWorker() ([]*ec2.Instance, error) {
 	var instances []*ec2.Instance
-	svc := ec2.New(sess)
+	svc := ec2.New(Sess)
 	response, err := svc.RunInstances(&ec2.RunInstancesInput{
 		LaunchTemplate: &ec2.LaunchTemplateSpecification{LaunchTemplateName: aws.String("worker")},
 		MinCount:       aws.Int64(1),
@@ -28,7 +28,7 @@ func startNewWorker() ([]*ec2.Instance, error) {
 }
 
 func StartWorkers(workers []*worker) error {
-	svc := ec2.New(sess)
+	svc := ec2.New(Sess)
 	_, err := svc.StartInstances(&ec2.StartInstancesInput{
 		InstanceIds: getInstanceIds(workers),
 	})
@@ -41,7 +41,7 @@ func StartWorkers(workers []*worker) error {
 }
 
 func StopWorkers(workers []*worker) error {
-	svc := ec2.New(sess)
+	svc := ec2.New(Sess)
 	_, err := svc.StopInstances(&ec2.StopInstancesInput{
 		InstanceIds: getInstanceIds(workers),
 	})
@@ -58,7 +58,7 @@ func TerminateWorkers(workers []*worker) error {
 	if len(instanceIds) < 1 {
 		return nil
 	}
-	svc := ec2.New(sess)
+	svc := ec2.New(Sess)
 	_, err := svc.TerminateInstances(&ec2.TerminateInstancesInput{
 		InstanceIds: instanceIds,
 	})
@@ -69,24 +69,6 @@ func TerminateWorkers(workers []*worker) error {
 	}
 	return nil
 }
-
-// func MonitorWorkers(instanceIds []*ec2.Instance) []*ec2.InstanceStatus {
-// 	svc := ec2.New(sess)
-// 	var result []*ec2.InstanceStatus
-// 	response, err := svc.DescribeInstanceStatus(&ec2.DescribeInstanceStatusInput{
-// 		InstanceIds: getWokerIds(instanceIds),
-// 	})
-
-// 	if err != nil {
-// 		log.Println("Could not describe instance status", err)
-// 	} else {
-// 		for _, inst := range response.InstanceStatuses {
-// 			result = append(result, inst)
-// 		}
-
-// 	}
-// 	return result
-// }
 
 func getInstanceIds([]*worker) []*string {
 	var instanceIds []*string
