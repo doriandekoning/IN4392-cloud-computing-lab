@@ -2,12 +2,16 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 )
 
 func StartNewWorker() ([]*ec2.Instance, error) {
+	if os.Getenv("LOCAL") != "" {
+		return nil, nil
+	}
 	var instances []*ec2.Instance
 	svc := ec2.New(Sess)
 	response, err := svc.RunInstances(&ec2.RunInstancesInput{

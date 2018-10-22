@@ -27,11 +27,17 @@ type worker struct {
 	Address    string
 	InstanceId string
 	Healty     bool
+	Active     bool
 }
 
 var workers []*worker
 
 var Sess *session.Session
+
+const maxWorkers = 3
+const minWorkers = 1
+
+var requestCount = 0
 
 func main() {
 
@@ -54,13 +60,14 @@ func main() {
 	router.HandleFunc("/worker/register", registerWorker).Methods("POST")
 	router.HandleFunc("/worker/unregister", unregisterWorker).Methods("DELETE")
 
+	go scaleWorkers()
 	go getWorkersHealth()
 	log.Fatal(http.ListenAndServe(":8000", router))
 
 }
 
 func GetHealth(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintln(w, "Registered workers: "+strconv.Itoa(len(workers)))
+	fmt.Fprintln(w, "Registered workers: "+strconv.Itoa(len(workers))+"  Requests in the last minute: "+strconv.Itoa(requestCount))
 	for _, worker := range workers {
 		fmt.Fprintln(w, worker.Address+" -- "+worker.InstanceId+" -- "+strconv.FormatBool(worker.Healty))
 	}
@@ -80,6 +87,7 @@ func AddWorkerRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func ProcessGraph(w http.ResponseWriter, r *http.Request) {
+	requestCount++
 	csvReader := csv.NewReader(r.Body)
 	//Parse first line with vertex weights
 	line, err := csvReader.Read()
@@ -143,9 +151,8 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	go distributeGraph(&graph, r.URL.Query())
 	//Write id to response
 	idBytes, _ := graph.Id.MarshalText()
-	w.Write(idBytes)
 	w.WriteHeader(http.StatusAccepted)
-
+	w.Write(idBytes)
 }
 
 func registerWorker(w http.ResponseWriter, r *http.Request) {
@@ -157,6 +164,7 @@ func registerWorker(w http.ResponseWriter, r *http.Request) {
 		util.BadRequest(w, "Error unmarshaling body", err)
 		return
 	}
+	newWorker.Active = true
 	workers = append(workers, &newWorker)
 	fmt.Println("Worker: " + newWorker.InstanceId + " successfully registered!")
 }
@@ -179,7 +187,7 @@ func unregisterWorker(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if oldWorker.InstanceId != "" {
-		//TODO terminate worker
+		TerminateWorkers([]*worker{&oldWorker})
 	}
 	fmt.Println("Worker: " + oldWorker.Address + " successfully unregistered!")
 }
@@ -188,6 +196,7 @@ func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 	// Distribute graph among workers
 	var workerID int
 	//TODO determine to which worker to send node (for now to first free worker)
+	//TODO only consider workers that are active/healty and what if there are no workers
 	err := sendGraphToWorker(*graph, workers[workerID], parameters)
 	if err != nil {
 		fmt.Println("Cannot distributes graph to: " + workers[workerID].Address)
@@ -218,6 +227,26 @@ func getWorkersHealth() {
 			}
 		}
 		time.Sleep(15 * time.Second)
+	}
+}
+
+func scaleWorkers() {
+	for {
+		if len(workers) < minWorkers || (len(workers) < maxWorkers && (requestCount/len(workers)) > 3) {
+			StartNewWorker()
+		} else if len(workers) > minWorkers && (requestCount/len(workers)) < 2 {
+			worker := workers[0]
+			// Set active to false to stop using this worker
+			worker.Active = false
+			_, err := grequests.Post(worker.Address+"/unregister", nil)
+			if err != nil {
+				fmt.Println("Unable to request to unregister, error:", err)
+				return
+			}
+			fmt.Println("Sucessfully did a request to unregister")
+		}
+		requestCount = 0
+		time.Sleep(60 * time.Second)
 	}
 }
 

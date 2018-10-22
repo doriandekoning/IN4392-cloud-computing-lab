@@ -9,6 +9,7 @@ export MASTER_PORT=8000
 export MASTER_ADDRESS=http://localhost
 export OWN_PORT=8888
 export OWN_ADDRESS=http://localhost
+export LOCAL=true
 
 # Build
 ## Worker
@@ -22,14 +23,15 @@ export OWN_ADDRESS=http://localhost
 
 # Deploy
 ## Worker
-`cd  ~/go/src/github.com/doriandekoning/IN4392-cloud-computing-lab/worker`
-`go build -o bin/worker`
+`cd  ~/go/src/github.com/doriandekoning/IN4392-cloud-computing-lab`
+`git pull`
+`go build -o bin/worker worker/main.go`
 Create a new image in AWS console and update the worker launch template with this new image.
 Set the default version of the template to the new version
 status can be checked with `sudo systemctl status worker`
 ## Master
-`cd  ~/go/src/github.com/doriandekoning/IN4392-cloud-computing-lab/master`
+`cd  ~/go/src/github.com/doriandekoning/IN4392-cloud-computing-lab`
 `git pull`
-`go build -o bin/master`
+`go build -o bin/master master/*`
 `sudo systemctl restart master`
 status can be checked with `sudo systemctl status master`

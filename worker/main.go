@@ -50,6 +50,7 @@ func main() {
 	router.Use(middleware.LoggingMiddleWare)
 	router.HandleFunc("/health", GetHealth)
 	router.HandleFunc("/graph", ReceiveGraph).Methods("POST")
+	router.HandleFunc("/unregister", UnRegisterRequest).Methods("POST")
 
 	register()
 	go checkMasterHealth()
@@ -59,6 +60,11 @@ func main() {
 
 func GetHealth(w http.ResponseWriter, r *http.Request) {
 
+}
+
+func UnRegisterRequest(w http.ResponseWriter, r *http.Request) {
+	// TODO check if this worker is still processing a graph and when done unregister
+	unregister()
 }
 
 func register() {
