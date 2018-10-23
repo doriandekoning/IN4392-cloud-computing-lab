@@ -37,7 +37,7 @@ var Sess *session.Session
 const maxWorkers = 3
 const minWorkers = 1
 
-var requestCount = 0
+var requestsSinceScaling = 0
 
 func main() {
 
@@ -67,7 +67,7 @@ func main() {
 }
 
 func GetHealth(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintln(w, "Registered workers: "+strconv.Itoa(len(workers))+"  Requests in the last minute: "+strconv.Itoa(requestCount))
+	fmt.Fprintln(w, "Registered workers: "+strconv.Itoa(len(workers))+"  Requests in the last minute: "+strconv.Itoa(requestsSinceScaling))
 	for _, worker := range workers {
 		fmt.Fprintln(w, worker.Address+" -- "+worker.InstanceId+" -- "+strconv.FormatBool(worker.Healty))
 	}
@@ -90,7 +90,7 @@ func AddWorkerRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func ProcessGraph(w http.ResponseWriter, r *http.Request) {
-	requestCount++
+	requestsSinceScaling++
 	csvReader := csv.NewReader(r.Body)
 	//Parse first line with vertex weights
 	line, err := csvReader.Read()
@@ -237,9 +237,9 @@ func getWorkersHealth() {
 
 func scaleWorkers() {
 	for {
-		if len(workers) < minWorkers || (len(workers) < maxWorkers && (requestCount/len(workers)) > 3) {
+		if len(workers) < minWorkers || (len(workers) < maxWorkers && (requestsSinceScaling/len(workers)) > 3) {
 			StartNewWorker()
-		} else if len(workers) > minWorkers && (requestCount/len(workers)) < 2 {
+		} else if len(workers) > minWorkers && (requestsSinceScaling/len(workers)) < 2 {
 			worker := workers[0]
 			// Set active to false to stop using this worker
 			worker.Active = false
@@ -251,7 +251,7 @@ func scaleWorkers() {
 			resp.Close()
 			fmt.Println("Sucessfully did a request to unregister")
 		}
-		requestCount = 0
+		requestsSinceScaling = 0
 		time.Sleep(60 * time.Second)
 	}
 }
