@@ -22,13 +22,14 @@ func StartNewWorker() ([]*ec2.Instance, error) {
 
 	if err != nil {
 		log.Println("Could not create instance", err)
-	} else {
-		for _, inst := range response.Instances {
-			instances = append(instances, inst)
-		}
-
+		return nil, err
 	}
-	return instances, err
+
+	for _, inst := range response.Instances {
+		instances = append(instances, inst)
+	}
+
+	return instances, nil
 }
 
 func StartWorkers(workers []*worker) error {

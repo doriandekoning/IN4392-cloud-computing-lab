@@ -75,10 +75,13 @@ func GetHealth(w http.ResponseWriter, r *http.Request) {
 
 func KillWorkersRequest(w http.ResponseWriter, r *http.Request) {
 	err := TerminateWorkers(workers)
-	if err == nil {
-		workers = nil
-		fmt.Println("Workers terminated")
+	if err != nil {
+		util.InternalServerError(w, "Workers could be terminated", err)
+		return
 	}
+
+	workers = nil
+	fmt.Println("Workers terminated")
 }
 
 func AddWorkerRequest(w http.ResponseWriter, r *http.Request) {
