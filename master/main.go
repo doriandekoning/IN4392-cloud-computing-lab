@@ -209,20 +209,22 @@ func sendGraphToWorker(graph graphs.Graph, worker *worker, parameters map[string
 		Headers: map[string]string{"Content-Type": "application/json"},
 		Params:  paramsMapToRequestParamsMap(parameters),
 	}
-	_, err := grequests.Post(worker.Address+"/graph", &options)
+	resp, err := grequests.Post(worker.Address+"/graph", &options)
 	if err != nil {
 		return err
 	}
+	resp.Close()
 	return nil
 }
 
 func getWorkersHealth() {
 	for {
 		for _, worker := range workers {
-			_, err := grequests.Get(worker.Address+"/health", nil)
+			resp, err := grequests.Get(worker.Address+"/health", nil)
 			if err != nil {
 				worker.Healty = false
 			} else {
+				resp.Close()
 				worker.Healty = true
 			}
 		}
@@ -238,11 +240,12 @@ func scaleWorkers() {
 			worker := workers[0]
 			// Set active to false to stop using this worker
 			worker.Active = false
-			_, err := grequests.Post(worker.Address+"/unregister", nil)
+			resp, err := grequests.Post(worker.Address+"/unregister", nil)
 			if err != nil {
 				fmt.Println("Unable to request to unregister, error:", err)
 				return
 			}
+			resp.Close()
 			fmt.Println("Sucessfully did a request to unregister")
 		}
 		requestCount = 0

@@ -73,8 +73,9 @@ func register() {
 			JSON:    map[string]string{"address": getOwnURL(), "instanceId": conf.Own.Instanceid},
 			Headers: map[string]string{"Content-Type": "application/json"},
 		}
-		_, err := grequests.Post(getMasterURL()+"/worker/register", &options)
+		resp, err := grequests.Post(getMasterURL()+"/worker/register", &options)
 		if err == nil {
+			resp.Close()
 			fmt.Println("Successfully registered")
 			break
 		}
@@ -89,11 +90,12 @@ func unregister() {
 		JSON:    map[string]string{"address": getOwnURL(), "instanceId": conf.Own.Instanceid},
 		Headers: map[string]string{"Content-Type": "application/json"},
 	}
-	_, err := grequests.Delete(getMasterURL()+"/worker/unregister", &options)
+	resp, err := grequests.Delete(getMasterURL()+"/worker/unregister", &options)
 	if err != nil {
 		fmt.Println("Unable to register, error:", err)
 		return
 	}
+	resp.Close()
 	fmt.Println("Sucessfully unregistered")
 
 }
@@ -178,10 +180,12 @@ outerloop:
 
 func checkMasterHealth() {
 	for {
-		_, err := grequests.Get(getMasterURL()+"/health", nil)
+		resp, err := grequests.Get(getMasterURL()+"/health", nil)
 		if err != nil {
 			fmt.Println("Master seems to be offline")
 			register()
+		} else {
+			resp.Close()
 		}
 		time.Sleep(10 * time.Second)
 	}
