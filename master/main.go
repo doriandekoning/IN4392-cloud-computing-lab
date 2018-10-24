@@ -16,9 +16,16 @@ import (
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/util"
 	"github.com/levigross/grequests"
 	uuid "github.com/satori/go.uuid"
+	"github.com/vrischmann/envconfig"
 
 	"github.com/gorilla/mux"
 )
+
+type Config struct {
+	ApiKey string
+}
+
+var config Config
 
 var g graphs.Graph
 
@@ -31,8 +38,15 @@ var workers []*worker
 
 func main() {
 
+	err := envconfig.Init(&config)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	router := mux.NewRouter()
 	router.Use(middleware.LoggingMiddleWare)
+	authenticationMiddleware := middleware.AuthenticationMiddleware{ApiKey: config.ApiKey}
+	router.Use(authenticationMiddleware.Middleware)
 	router.HandleFunc("/health", GetHealth).Methods("GET")
 	router.HandleFunc("/processgraph", ProcessGraph).Methods("POST")
 	router.HandleFunc("/worker/register", registerWorker).Methods("POST")
@@ -162,7 +176,7 @@ func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 func sendGraphToWorker(graph graphs.Graph, worker *worker, parameters map[string][]string) error {
 	options := grequests.RequestOptions{
 		JSON:    graph,
-		Headers: map[string]string{"Content-Type": "application/json"},
+		Headers: map[string]string{"Content-Type": "application/json", "X-Auth": config.ApiKey},
 		Params:  paramsMapToRequestParamsMap(parameters),
 	}
 	_, err := grequests.Post(worker.Address+"/graph", &options)
@@ -173,9 +187,10 @@ func sendGraphToWorker(graph graphs.Graph, worker *worker, parameters map[string
 }
 
 func getWorkersHealth() {
+	requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": config.ApiKey}}
 	for {
 		for _, worker := range workers {
-			_, err := grequests.Get(worker.Address+"/health", nil)
+			_, err := grequests.Get(worker.Address+"/health", &requestOptions)
 			if err != nil {
 				worker.Healty = false
 			} else {
