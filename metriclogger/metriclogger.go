@@ -40,6 +40,19 @@ func CreateMetricFolder() {
 	}
 }
 
+func ClearMetrics() {
+	var err error
+
+	file, err := os.OpenFile(CSVLogFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+
+	if err != nil {
+		log.Fatal("Error clearing log ", err)
+	}
+
+	file.Truncate(0)
+	file.Seek(0, 0)
+}
+
 func LogFloatMetric(workerId string, metric Metric, value float64) {
 	LogMetric(workerId, metric, strconv.FormatFloat(value, 'f', 6, 64))
 }

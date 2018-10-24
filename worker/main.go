@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"../metriclogger"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/graphs"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/middleware"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/util"
@@ -46,6 +47,9 @@ func main() {
 		log.Fatal(err)
 	}
 
+	metriclogger.CreateMetricFolder()
+	go metriclogger.MonitorResourceUsage()
+
 	router := mux.NewRouter()
 	router.Use(middleware.LoggingMiddleWare)
 	router.HandleFunc("/health", GetHealth)
@@ -54,6 +58,7 @@ func main() {
 
 	register()
 	go checkMasterHealth()
+	go sendMetrics()
 	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(conf.Own.Port), router))
 	defer unregister()
 }
@@ -175,6 +180,16 @@ outerloop:
 	csvWriter.Flush()
 	//TODO send to storage
 	fmt.Println(buf.String())
+
+}
+
+func sendMetrics() {
+
+	for {
+		println("Sending metrics...")
+
+		time.Sleep(10 * time.Second)
+	}
 
 }
 
