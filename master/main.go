@@ -28,16 +28,24 @@ var g graphs.Graph
 type worker struct {
 	Address              string
 	InstanceId           string
-	secondsNotResponding int
+	SecondsNotResponding int
 	Healty               bool
 	Active               bool
+}
+
+type HealthResponse struct {
+	MaxWorkers           int
+	MinWorkers           int
+	RequestsSinceScaling int
+	ActiveWorkers        int
+	Workers              []*worker
 }
 
 var workers []*worker
 
 var Sess *session.Session
 
-var maxWorkers = 3
+var maxWorkers int
 
 const minWorkers = 1
 
@@ -72,10 +80,14 @@ func main() {
 }
 
 func GetHealth(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintln(w, "Registered workers: "+strconv.Itoa(len(workers))+"  Requests in the last minute: "+strconv.Itoa(requestsSinceScaling))
-	for _, worker := range workers {
-		fmt.Fprintln(w, worker.Address+" -- "+worker.InstanceId+" -- "+strconv.FormatBool(worker.Healty)+" -- "+strconv.Itoa(worker.secondsNotResponding))
+	var response = HealthResponse{MaxWorkers: maxWorkers, MinWorkers: minWorkers, RequestsSinceScaling: requestsSinceScaling, ActiveWorkers: len(getActiveWorkers()), Workers: workers}
+	js, err := json.Marshal(response)
+	if err != nil {
+		util.InternalServerError(w, "Health could not be retrieved", err)
+		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(js)
 }
 
 func KillWorkersRequest(w http.ResponseWriter, r *http.Request) {
@@ -86,12 +98,12 @@ func KillWorkersRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	workers = nil
-	fmt.Println("Workers terminated")
+	util.GeneralResponse(w, true, "Workers terminated")
 }
 
 func AddWorkerRequest(w http.ResponseWriter, r *http.Request) {
 	StartNewWorker()
-	fmt.Println("New worker started")
+	util.GeneralResponse(w, true, "New worker started")
 }
 
 func ProcessGraph(w http.ResponseWriter, r *http.Request) {
@@ -174,7 +186,7 @@ func registerWorker(w http.ResponseWriter, r *http.Request) {
 	}
 	newWorker.Active = true
 	workers = append(workers, &newWorker)
-	fmt.Println("Worker: " + newWorker.InstanceId + " successfully registered!")
+	util.GeneralResponse(w, true, "Worker: "+newWorker.InstanceId+" successfully registered!")
 }
 
 func unregisterWorkerRequest(w http.ResponseWriter, r *http.Request) {
@@ -186,6 +198,7 @@ func unregisterWorkerRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	unregisterWorker(&oldWorker)
+	util.GeneralResponse(w, true, "Worker: "+oldWorker.InstanceId+" successfully unregistered!")
 }
 
 func unregisterWorker(oldWorker *worker) {
@@ -201,7 +214,6 @@ func unregisterWorker(oldWorker *worker) {
 	if oldWorker.InstanceId != "" {
 		TerminateWorkers([]*worker{oldWorker})
 	}
-	fmt.Println("Worker: " + oldWorker.Address + " successfully unregistered!")
 }
 
 func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
@@ -238,12 +250,12 @@ func getWorkersHealth() {
 			defer resp.Close()
 			if err != nil {
 				worker.Healty = false
-				worker.secondsNotResponding = worker.secondsNotResponding + healthCheckInterval
+				worker.SecondsNotResponding = worker.SecondsNotResponding + healthCheckInterval
 			} else {
 				worker.Healty = true
-				worker.secondsNotResponding = 0
+				worker.SecondsNotResponding = 0
 			}
-			if worker.secondsNotResponding > 60 {
+			if worker.SecondsNotResponding > 60 {
 				unregisterWorker(worker)
 			}
 		}
@@ -263,10 +275,8 @@ func scaleWorkers() {
 			resp, err := grequests.Post(worker.Address+"/unregister", nil)
 			defer resp.Close()
 			if err != nil {
-				fmt.Println("Unable to request to unregister, error:", err)
 				return
 			}
-			fmt.Println("Sucessfully did a request to unregister")
 		}
 		requestsSinceScaling = 0
 		time.Sleep(60 * time.Second)
