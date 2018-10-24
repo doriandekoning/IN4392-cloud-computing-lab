@@ -112,11 +112,10 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	//Asynchronously distribute the graph
 	go distributeGraph(&graph, r.URL.Query())
+	w.WriteHeader(http.StatusAccepted)
 	//Write id to response
 	idBytes, _ := graph.Id.MarshalText()
 	w.Write(idBytes)
-	//TODO check why this throws "multiple writes to header"
-	w.WriteHeader(http.StatusAccepted)
 
 }
 
