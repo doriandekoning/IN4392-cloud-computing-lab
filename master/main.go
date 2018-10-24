@@ -39,6 +39,7 @@ func main() {
 	router.HandleFunc("/{nodetype}/register", registerNode).Methods("POST")
 	router.HandleFunc("/storagenode", listStorageNodes).Methods("GET")
 	router.HandleFunc("/worker/unregister", unregisterWorker).Methods("DELETE")
+	router.HandleFunc("/result/{processingRequestId}", getResult).Methods("GET")
 
 	go getNodesHealth()
 	log.Fatal(http.ListenAndServe(":8000", router))
@@ -228,4 +229,42 @@ func listStorageNodes(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Write(retVal)
 	}
+}
+
+type hasRequestResult struct {
+	statusCode  int
+	nodeAddress string
+}
+
+func getResult(w http.ResponseWriter, r *http.Request) {
+	requestID, err := uuid.FromString(mux.Vars(r)["processingRequestId"])
+	if err != nil {
+		util.BadRequest(w, "Error parsing processingRequestId", err)
+		return
+	}
+
+	respChannel := make(chan hasRequestResult)
+	for _, node := range storageNodes {
+		go storageNodeHasResult(respChannel, node.Address, requestID)
+	}
+	amountResults := 0
+	var resultsNeeded = (len(storageNodes) + 1) / 2
+	for i := 0; i < len(storageNodes); i++ {
+		result := <-respChannel
+		if result.statusCode != -1 && result.statusCode < 300 {
+			amountResults++
+			if amountResults >= resultsNeeded {
+				w.Write([]byte(result.nodeAddress + "/results/" + requestID.String()))
+				return
+			}
+		}
+	}
+}
+
+func storageNodeHasResult(respChannel chan hasRequestResult, nodeAddress string, requestID uuid.UUID) {
+	resp, err := grequests.Get(nodeAddress+"/result/"+requestID.String(), nil)
+	if err != nil {
+		fmt.Println("Error getting info if node has result ", err)
+	}
+	respChannel <- hasRequestResult{resp.StatusCode, nodeAddress}
 }

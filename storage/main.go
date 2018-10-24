@@ -51,6 +51,8 @@ func main() {
 	router.Use(middleware.LoggingMiddleWare)
 	router.HandleFunc("/health", GetHealth)
 	router.HandleFunc("/storeresult", storeResult).Methods("POST")
+	router.HandleFunc("/result/{processingRequestID}", hasResult).Methods("GET")
+	router.PathPrefix("/results/").Handler(http.StripPrefix("/results/", http.FileServer(http.Dir("./out"))))
 
 	register()
 	go checkMasterHealth()
@@ -124,4 +126,25 @@ func storeResult(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 	file.WriteString(strings.Trim(strings.Join(strings.Fields(fmt.Sprint(result.Values)), ","), "[]"))
 
+}
+
+func hasResult(w http.ResponseWriter, r *http.Request) {
+	requestID, err := uuid.FromString(mux.Vars(r)["processingRequestID"])
+	if err != nil {
+		util.BadRequest(w, "Error parsing processingRequestId", err)
+		return
+	}
+	files, err := ioutil.ReadDir("out")
+	if err != nil {
+		util.InternalServerError(w, "Error reading results from filesystem", err)
+		return
+	}
+
+	for _, f := range files {
+		if f.Name() == requestID.String() {
+			w.WriteHeader(200)
+			return
+		}
+	}
+	w.WriteHeader(404)
 }
