@@ -63,7 +63,7 @@ func GetHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func UnRegisterRequest(w http.ResponseWriter, r *http.Request) {
-	// TODO check if this worker is still processing a graph and when done unregister
+	// TODO check if this worker is still processing a graph and when done unregister there shouldn't be any new requests coming in
 	unregister()
 }
 
@@ -74,8 +74,8 @@ func register() {
 			Headers: map[string]string{"Content-Type": "application/json"},
 		}
 		resp, err := grequests.Post(getMasterURL()+"/worker/register", &options)
+		defer resp.Close()
 		if err == nil {
-			resp.Close()
 			fmt.Println("Successfully registered")
 			break
 		}
@@ -91,11 +91,11 @@ func unregister() {
 		Headers: map[string]string{"Content-Type": "application/json"},
 	}
 	resp, err := grequests.Delete(getMasterURL()+"/worker/unregister", &options)
+	defer resp.Close()
 	if err != nil {
 		fmt.Println("Unable to register, error:", err)
 		return
 	}
-	resp.Close()
 	fmt.Println("Sucessfully unregistered")
 
 }
@@ -181,11 +181,10 @@ outerloop:
 func checkMasterHealth() {
 	for {
 		resp, err := grequests.Get(getMasterURL()+"/health", nil)
+		defer resp.Close()
 		if err != nil {
 			fmt.Println("Master seems to be offline")
 			register()
-		} else {
-			resp.Close()
 		}
 		time.Sleep(10 * time.Second)
 	}
