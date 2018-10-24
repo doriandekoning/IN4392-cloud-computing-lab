@@ -7,7 +7,9 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -26,17 +28,27 @@ import (
 var g graphs.Graph
 
 type worker struct {
-	Address    string
-	InstanceId string
-	Healty     bool
-	Active     bool
+	Address              string
+	InstanceId           string
+	SecondsNotResponding int
+	Healty               bool
+	Active               bool
+}
+
+type HealthResponse struct {
+	MaxWorkers           int
+	MinWorkers           int
+	RequestsSinceScaling int
+	ActiveWorkers        int
+	Workers              []*worker
 }
 
 var workers []*worker
 
 var Sess *session.Session
 
-const maxWorkers = 3
+var maxWorkers int
+
 const minWorkers = 1
 
 var requestsSinceScaling = 0
@@ -48,7 +60,9 @@ func main() {
 	CreateMetricFolder()
 	go monitorResourceUsage()
 
-	Sess, err = session.NewSession(&aws.Config{
+	maxWorkers, err = strconv.Atoi(os.Getenv("MAXWORKERS"))
+
+  Sess, err = session.NewSession(&aws.Config{
 		Region: aws.String("us-east-1"),
 	})
 
@@ -63,7 +77,7 @@ func main() {
 	router.HandleFunc("/addworker", AddWorkerRequest).Methods("GET")
 	router.HandleFunc("/processgraph", ProcessGraph).Methods("POST")
 	router.HandleFunc("/worker/register", registerWorker).Methods("POST")
-	router.HandleFunc("/worker/unregister", unregisterWorker).Methods("DELETE")
+	router.HandleFunc("/worker/unregister", unregisterWorkerRequest).Methods("DELETE")
 
 	go scaleWorkers()
 	go getWorkersHealth()
@@ -73,26 +87,30 @@ func main() {
 }
 
 func GetHealth(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintln(w, "Registered workers: "+strconv.Itoa(len(workers))+"  Requests in the last minute: "+strconv.Itoa(requestsSinceScaling))
-	for _, worker := range workers {
-		fmt.Fprintln(w, worker.Address+" -- "+worker.InstanceId+" -- "+strconv.FormatBool(worker.Healty))
+	var response = HealthResponse{MaxWorkers: maxWorkers, MinWorkers: minWorkers, RequestsSinceScaling: requestsSinceScaling, ActiveWorkers: len(getActiveWorkers()), Workers: workers}
+	js, err := json.Marshal(response)
+	if err != nil {
+		util.InternalServerError(w, "Health could not be retrieved", err)
+		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(js)
 }
 
 func KillWorkersRequest(w http.ResponseWriter, r *http.Request) {
 	err := TerminateWorkers(workers)
 	if err != nil {
-		util.InternalServerError(w, "Workers could be terminated", err)
+		util.InternalServerError(w, "Workers could not be terminated", err)
 		return
 	}
 
 	workers = nil
-	fmt.Println("Workers terminated")
+	util.GeneralResponse(w, true, "Workers terminated")
 }
 
 func AddWorkerRequest(w http.ResponseWriter, r *http.Request) {
 	StartNewWorker()
-	fmt.Println("New worker started")
+	util.GeneralResponse(w, true, "New worker started")
 }
 
 func ProcessGraph(w http.ResponseWriter, r *http.Request) {
@@ -175,10 +193,10 @@ func registerWorker(w http.ResponseWriter, r *http.Request) {
 	}
 	newWorker.Active = true
 	workers = append(workers, &newWorker)
-	fmt.Println("Worker: " + newWorker.InstanceId + " successfully registered!")
+	util.GeneralResponse(w, true, "Worker: "+newWorker.InstanceId+" successfully registered!")
 }
 
-func unregisterWorker(w http.ResponseWriter, r *http.Request) {
+func unregisterWorkerRequest(w http.ResponseWriter, r *http.Request) {
 	var oldWorker worker
 	bodyBytes, _ := ioutil.ReadAll(r.Body)
 	err := json.Unmarshal(bodyBytes, &oldWorker)
@@ -186,6 +204,11 @@ func unregisterWorker(w http.ResponseWriter, r *http.Request) {
 		util.BadRequest(w, "Error unmarshalling body", err)
 		return
 	}
+	unregisterWorker(&oldWorker)
+	util.GeneralResponse(w, true, "Worker: "+oldWorker.InstanceId+" successfully unregistered!")
+}
+
+func unregisterWorker(oldWorker *worker) {
 	for index, worker := range workers {
 		if worker.Address == oldWorker.Address {
 			//Move last worker to location of worker to remove
@@ -196,19 +219,18 @@ func unregisterWorker(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if oldWorker.InstanceId != "" {
-		TerminateWorkers([]*worker{&oldWorker})
+		TerminateWorkers([]*worker{oldWorker})
 	}
-	fmt.Println("Worker: " + oldWorker.Address + " successfully unregistered!")
 }
 
 func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
-	// Distribute graph among workers
-	var workerID int
-	//TODO determine to which worker to send node (for now to first free worker)
-	//TODO only consider workers that are active/healty and what if there are no workers
-	err := sendGraphToWorker(*graph, workers[workerID], parameters)
+	var activeWorkers = getActiveWorkers()
+	// Distribute graph among workers by randomly selecting a worker
+	// possible improvement select the worker which has the shortest queue
+	var worker = activeWorkers[rand.Intn(len(activeWorkers))]
+	err := sendGraphToWorker(*graph, worker, parameters)
 	if err != nil {
-		fmt.Println("Cannot distributes graph to: " + workers[workerID].Address)
+		fmt.Println("Cannot distributes graph to: " + worker.Address)
 	}
 }
 
@@ -219,43 +241,49 @@ func sendGraphToWorker(graph graphs.Graph, worker *worker, parameters map[string
 		Params:  paramsMapToRequestParamsMap(parameters),
 	}
 	resp, err := grequests.Post(worker.Address+"/graph", &options)
+	defer resp.Close()
 	if err != nil {
 		return err
 	}
-	resp.Close()
+
 	return nil
 }
 
 func getWorkersHealth() {
+	const healthCheckInterval = 30 //seconds
 	for {
 		for _, worker := range workers {
 			resp, err := grequests.Get(worker.Address+"/health", nil)
+			defer resp.Close()
 			if err != nil {
 				worker.Healty = false
+				worker.SecondsNotResponding = worker.SecondsNotResponding + healthCheckInterval
 			} else {
-				resp.Close()
 				worker.Healty = true
+				worker.SecondsNotResponding = 0
+			}
+			if worker.SecondsNotResponding > 60 {
+				unregisterWorker(worker)
 			}
 		}
-		time.Sleep(15 * time.Second)
+		time.Sleep(healthCheckInterval * time.Second)
 	}
 }
 
 func scaleWorkers() {
 	for {
-		if len(workers) < minWorkers || (len(workers) < maxWorkers && (requestsSinceScaling/len(workers)) > 3) {
+		var activeWorkers = getActiveWorkers()
+		if len(activeWorkers) < minWorkers || (len(activeWorkers) < maxWorkers && (requestsSinceScaling/len(activeWorkers)) > 3) {
 			StartNewWorker()
-		} else if len(workers) > minWorkers && (requestsSinceScaling/len(workers)) < 2 {
-			worker := workers[0]
+		} else if len(activeWorkers) > minWorkers && (requestsSinceScaling/len(activeWorkers)) < 2 {
+			worker := activeWorkers[0]
 			// Set active to false to stop using this worker
 			worker.Active = false
 			resp, err := grequests.Post(worker.Address+"/unregister", nil)
+			defer resp.Close()
 			if err != nil {
-				fmt.Println("Unable to request to unregister, error:", err)
 				return
 			}
-			resp.Close()
-			fmt.Println("Sucessfully did a request to unregister")
 		}
 		requestsSinceScaling = 0
 		time.Sleep(60 * time.Second)
@@ -286,7 +314,16 @@ func monitorResourceUsage() {
 
 		time.Sleep(5 * time.Second)
 	}
+}
 
+func getActiveWorkers() []*worker {
+	var result []*worker
+	for _, worker := range workers {
+		if worker.Active && worker.Healty {
+			result = append(result, worker)
+		}
+	}
+	return result
 }
 
 func paramsMapToRequestParamsMap(original map[string][]string) map[string]string {

@@ -10,6 +10,7 @@ export MASTER_ADDRESS=http://localhost
 export OWN_PORT=8888
 export OWN_ADDRESS=http://localhost
 export LOCAL=true
+export MAXWORKERS=3
 
 # Build
 ## Worker
