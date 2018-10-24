@@ -19,10 +19,13 @@ type Metric int
 
 const (
 	NumRegisteredWorkers Metric = iota
+	UsedCPUPercent
+	AvailableRAM
+	TotalRAM
 )
 
 func (s Metric) String() string {
-	return [...]string{"num_registered_workers"}[s]
+	return [...]string{"workers_num_registered", "cpu_used_pct", "ram_available", "ram_total"}[s]
 }
 
 func CreateMetricFolder() {
@@ -34,7 +37,15 @@ func CreateMetricFolder() {
 	}
 }
 
-func LogMetric(workerId string, metric Metric, value float64) {
+func LogFloatMetric(workerId string, metric Metric, value float64) {
+	LogMetric(workerId, metric, strconv.FormatFloat(value, 'f', 6, 64))
+}
+
+func LogUIntMetric(workerId string, metric Metric, value uint64) {
+	LogMetric(workerId, metric, strconv.FormatUint(value, 10))
+}
+
+func LogMetric(workerId string, metric Metric, value string) {
 	var timestamp = int(time.Now().Unix())
 
 	file, err := os.OpenFile(CSVLogFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
@@ -50,6 +61,6 @@ func LogMetric(workerId string, metric Metric, value float64) {
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 
-	var row = []string{strconv.Itoa(timestamp), workerId, metric.String(), strconv.FormatFloat(value, 'f', 6, 64)}
+	var row = []string{strconv.Itoa(timestamp), workerId, metric.String(), value}
 	writer.Write(row)
 }

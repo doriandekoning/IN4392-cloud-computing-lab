@@ -19,6 +19,8 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/levigross/grequests"
 	uuid "github.com/satori/go.uuid"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/mem"
 )
 
 var g graphs.Graph
@@ -44,6 +46,7 @@ func main() {
 	var err error
 
 	CreateMetricFolder()
+	go monitorResourceUsage()
 
 	Sess, err = session.NewSession(&aws.Config{
 		Region: aws.String("us-east-1"),
@@ -64,6 +67,7 @@ func main() {
 
 	go scaleWorkers()
 	go getWorkersHealth()
+
 	log.Fatal(http.ListenAndServe(":8000", router))
 
 }
@@ -256,6 +260,33 @@ func scaleWorkers() {
 		requestsSinceScaling = 0
 		time.Sleep(60 * time.Second)
 	}
+}
+
+func monitorResourceUsage() {
+	// TODO: This should also be implemented for the workers, which should send log this data once every 5 (?) seconds and send it once every minute (?) to the master.
+	var initial = true
+	for {
+		var err error
+
+		cpuPercent, err := cpu.Percent(0, false)
+		memstat, err := mem.VirtualMemory()
+
+		if err == nil {
+			// Initially we can log some extra system metrics.
+			if initial {
+				LogUIntMetric("master", TotalRAM, memstat.Total)
+				initial = false
+			}
+
+			LogFloatMetric("master", UsedCPUPercent, cpuPercent[0])
+			LogUIntMetric("master", AvailableRAM, memstat.Available)
+
+			//TODO: Automation experiment => Monitor in and outgoing packets?
+		}
+
+		time.Sleep(5 * time.Second)
+	}
+
 }
 
 func paramsMapToRequestParamsMap(original map[string][]string) map[string]string {
