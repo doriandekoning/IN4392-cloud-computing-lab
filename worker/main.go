@@ -98,17 +98,6 @@ func unregister() {
 
 }
 
-//TODO rename
-func getSubProblem(w http.ResponseWriter, r *http.Request) {
-	bodyBytes, _ := ioutil.ReadAll(r.Body)
-	type payload struct {
-		workers []node
-		nodes   []graphs.Node
-	}
-	actualPayload := payload{}
-	json.Unmarshal(bodyBytes, &actualPayload)
-}
-
 func getMasterURL() string {
 	return conf.Master.Address + ":" + strconv.Itoa(conf.Master.Port)
 }
