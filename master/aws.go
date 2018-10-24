@@ -75,7 +75,7 @@ func TerminateWorkers(workers []*worker) error {
 	return nil
 }
 
-func getInstanceIds([]*worker) []*string {
+func getInstanceIds(workers []*worker) []*string {
 	var instanceIds []*string
 	for _, worker := range workers {
 		if worker.InstanceId != "" {

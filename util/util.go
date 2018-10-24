@@ -6,11 +6,6 @@ import (
 	"net/http"
 )
 
-type GeneralResponseObject struct {
-	succes  bool
-	message string
-}
-
 //BadRequest returns a bad request response on the given response writer and prints the provided error
 func BadRequest(w http.ResponseWriter, text string, err error) {
 	w.WriteHeader(http.StatusBadRequest)
@@ -26,7 +21,13 @@ func InternalServerError(w http.ResponseWriter, text string, err error) {
 }
 
 func GeneralResponse(w http.ResponseWriter, succes bool, text string) {
-	var response = GeneralResponseObject{succes: succes, message: text}
+	var response = struct {
+		succes  bool
+		message string
+	}{
+		succes:  succes,
+		message: text,
+	}
 	js, err := json.Marshal(response)
 	if err != nil {
 		InternalServerError(w, "Error in parsing JSON response", err)

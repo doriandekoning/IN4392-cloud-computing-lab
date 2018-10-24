@@ -26,11 +26,11 @@ import (
 var g graphs.Graph
 
 type worker struct {
-	Address              string
-	InstanceId           string
-	SecondsNotResponding int
-	Healty               bool
-	Active               bool
+	Address               string
+	InstanceId            string
+	LastResponseTimestamp int64
+	Healty                bool
+	Active                bool
 }
 
 type HealthResponse struct {
@@ -185,6 +185,7 @@ func registerWorker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	newWorker.Active = true
+	newWorker.LastResponseTimestamp = time.Now().Unix()
 	workers = append(workers, &newWorker)
 	util.GeneralResponse(w, true, "Worker: "+newWorker.InstanceId+" successfully registered!")
 }
@@ -243,23 +244,21 @@ func sendGraphToWorker(graph graphs.Graph, worker *worker, parameters map[string
 }
 
 func getWorkersHealth() {
-	const healthCheckInterval = 30 //seconds
 	for {
 		for _, worker := range workers {
 			resp, err := grequests.Get(worker.Address+"/health", nil)
 			defer resp.Close()
 			if err != nil {
 				worker.Healty = false
-				worker.SecondsNotResponding = worker.SecondsNotResponding + healthCheckInterval
 			} else {
 				worker.Healty = true
-				worker.SecondsNotResponding = 0
+				worker.LastResponseTimestamp = time.Now().Unix()
 			}
-			if worker.SecondsNotResponding > 60 {
+			if time.Now().Unix()-worker.LastResponseTimestamp > 60 {
 				unregisterWorker(worker)
 			}
 		}
-		time.Sleep(healthCheckInterval * time.Second)
+		time.Sleep(30 * time.Second)
 	}
 }
 
