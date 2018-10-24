@@ -1,4 +1,4 @@
-package main
+package metriclogger
 
 import (
 	"encoding/csv"
@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/mem"
 )
 
 var CSVLogPath = "metrics"
@@ -63,4 +66,29 @@ func LogMetric(workerId string, metric Metric, value string) {
 
 	var row = []string{strconv.Itoa(timestamp), workerId, metric.String(), value}
 	writer.Write(row)
+}
+
+func MonitorResourceUsage() {
+	var initial = true
+	for {
+		var err error
+
+		cpuPercent, err := cpu.Percent(0, false)
+		memstat, err := mem.VirtualMemory()
+
+		if err == nil {
+			// Initially we can log some extra system metrics.
+			if initial {
+				LogUIntMetric("master", TotalRAM, memstat.Total)
+				initial = false
+			}
+
+			LogFloatMetric("master", UsedCPUPercent, cpuPercent[0])
+			LogUIntMetric("master", AvailableRAM, memstat.Available)
+
+			//TODO: Automation experiment => Monitor in and outgoing packets?
+		}
+
+		time.Sleep(5 * time.Second)
+	}
 }
