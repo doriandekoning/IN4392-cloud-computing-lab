@@ -43,6 +43,8 @@ func main() {
 
 	var err error
 
+	CreateMetricFolder()
+
 	Sess, err = session.NewSession(&aws.Config{
 		Region: aws.String("us-east-1"),
 	})
