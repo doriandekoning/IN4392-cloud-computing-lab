@@ -114,6 +114,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	//Write id to response
 	idBytes, _ := graph.Id.MarshalText()
 	w.Write(idBytes)
+	//TODO check why this throws "multiple writes to header"
 	w.WriteHeader(http.StatusAccepted)
 
 }
@@ -154,6 +155,7 @@ func registerNode(w http.ResponseWriter, r *http.Request) {
 	err := json.Unmarshal(b, &newNode)
 	if err != nil {
 		util.BadRequest(w, "Error unmarshalling storagenode registration body", err)
+		return
 	}
 	var replaced bool
 	for storageNodeIndex, storageNode := range *allNodes {
