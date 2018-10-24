@@ -77,6 +77,7 @@ func main() {
 	router.HandleFunc("/processgraph", ProcessGraph).Methods("POST")
 	router.HandleFunc("/worker/register", registerWorker).Methods("POST")
 	router.HandleFunc("/worker/unregister", unregisterWorkerRequest).Methods("DELETE")
+	router.HandleFunc("/metrics", ProcessMetrics).Methods("POST")
 
 	go scaleWorkers()
 	go getWorkersHealth()
@@ -305,4 +306,20 @@ func paramsMapToRequestParamsMap(original map[string][]string) map[string]string
 		retval[k] = v[0]
 	}
 	return retval
+}
+
+func ProcessMetrics(w http.ResponseWriter, r *http.Request) {
+	requestsSinceScaling++
+	csvReader := csv.NewReader(r.Body)
+
+	for {
+		line, err := csvReader.Read()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			log.Fatal(err)
+		}
+
+		metriclogger.LogMetricWithTimestamp(line[0], line[1], line[2], line[3])
+	}
 }

@@ -63,7 +63,10 @@ func LogUIntMetric(workerId string, metric Metric, value uint64) {
 
 func LogMetric(workerId string, metric Metric, value string) {
 	var timestamp = int(time.Now().Unix())
+	LogMetricWithTimestamp(strconv.Itoa(timestamp), workerId, metric.String(), value)
+}
 
+func LogMetricWithTimestamp(timestamp string, workerId string, metric string, value string) {
 	file, err := os.OpenFile(CSVLogFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 
 	if err != nil {
@@ -77,7 +80,7 @@ func LogMetric(workerId string, metric Metric, value string) {
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 
-	var row = []string{strconv.Itoa(timestamp), workerId, metric.String(), value}
+	var row = []string{timestamp, workerId, metric, value}
 	writer.Write(row)
 }
 
