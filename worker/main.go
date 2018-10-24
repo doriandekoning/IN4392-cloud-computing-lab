@@ -184,11 +184,20 @@ outerloop:
 }
 
 func sendMetrics() {
-
 	for {
-		println("Sending metrics...")
+		// TODO Send CSV file to the endpoint.
 
-		time.Sleep(10 * time.Second)
+		// resp, err := grequests.Post(getMasterURL()+"/metrics", nil)
+		// defer resp.Close()
+
+		// if err != nil {
+		// 	fmt.Println("Error sending metrics to master.")
+		// }
+
+		// // Clear the metrics file so we never send duplicate data.
+		// metriclogger.ClearMetrics()
+
+		// time.Sleep(10 * time.Second)
 	}
 
 }

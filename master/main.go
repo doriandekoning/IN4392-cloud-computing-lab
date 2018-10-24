@@ -309,17 +309,18 @@ func paramsMapToRequestParamsMap(original map[string][]string) map[string]string
 }
 
 func ProcessMetrics(w http.ResponseWriter, r *http.Request) {
-	requestsSinceScaling++
-	csvReader := csv.NewReader(r.Body)
+	// TODO: Read CSV from the request and append the metrics.
 
-	for {
-		line, err := csvReader.Read()
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			log.Fatal(err)
-		}
+	// csvReader := csv.NewReader(r.Body)
 
-		metriclogger.LogMetricWithTimestamp(line[0], line[1], line[2], line[3])
-	}
+	// for {
+	// 	line, err := csvReader.Read()
+	// 	if err == io.EOF {
+	// 		break
+	// 	} else if err != nil {
+	// 		log.Fatal(err)
+	// 	}
+
+	// 	metriclogger.LogMetricWithTimestamp(line[0], line[1], line[2], line[3])
+	// }
 }
