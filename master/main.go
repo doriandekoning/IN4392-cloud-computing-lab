@@ -39,7 +39,14 @@ func main() {
 	router.HandleFunc("/worker/unregister", unregisterWorker).Methods("DELETE")
 
 	go getWorkersHealth()
-	log.Fatal(http.ListenAndServe(":8000", router))
+	server := &http.Server{
+		Handler:      router,
+		Addr:         "127.0.0.1:8000",
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+
+	log.Fatal(server.ListenAndServe())
 
 }
 
