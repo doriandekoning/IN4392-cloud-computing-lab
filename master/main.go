@@ -13,10 +13,10 @@ import (
 	"strconv"
 	"time"
 
-	"../metriclogger"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/graphs"
+	"github.com/doriandekoning/IN4392-cloud-computing-lab/metriclogger"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/middleware"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/util"
 	"github.com/gorilla/mux"
@@ -56,7 +56,6 @@ func main() {
 
 	var err error
 
-	metriclogger.CreateMetricFolder()
 	go metriclogger.MonitorResourceUsage()
 
 	maxWorkers, err = strconv.Atoi(os.Getenv("MAXWORKERS"))
@@ -311,16 +310,16 @@ func paramsMapToRequestParamsMap(original map[string][]string) map[string]string
 func ProcessMetrics(w http.ResponseWriter, r *http.Request) {
 	// TODO: Read CSV from the request and append the metrics.
 
-	// csvReader := csv.NewReader(r.Body)
+	csvReader := csv.NewReader(r.Body)
 
-	// for {
-	// 	line, err := csvReader.Read()
-	// 	if err == io.EOF {
-	// 		break
-	// 	} else if err != nil {
-	// 		log.Fatal(err)
-	// 	}
+	for {
+		line, err := csvReader.Read()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			log.Fatal(err)
+		}
 
-	// 	metriclogger.LogMetricWithTimestamp(line[0], line[1], line[2], line[3])
-	// }
+		fmt.Printf("%s, %s, %s, %s\n", line[0], line[1], line[2], line[3])
+	}
 }
