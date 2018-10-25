@@ -69,7 +69,7 @@ func main() {
 	go getWorkersHealth()
 	server := &http.Server{
 		Handler:      router,
-		Addr:         "127.0.0.1:8000",
+		Addr:         ":8000",
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
