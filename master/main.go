@@ -247,11 +247,10 @@ func sendGraphToWorker(graph graphs.Graph, worker *worker, parameters map[string
 		Params:  paramsMapToRequestParamsMap(parameters),
 	}
 	resp, err := grequests.Post(worker.Address+"/graph", &options)
-	defer resp.Close()
 	if err != nil {
 		return err
 	}
-
+	defer resp.Close()
 	return nil
 }
 
@@ -259,10 +258,10 @@ func getWorkersHealth() {
 	for {
 		for _, worker := range workers {
 			resp, err := grequests.Get(worker.Address+"/health", nil)
-			defer resp.Close()
 			if err != nil {
 				worker.Healty = false
 			} else {
+				defer resp.Close()
 				worker.Healty = true
 				worker.LastResponseTimestamp = time.Now().Unix()
 			}
@@ -284,10 +283,10 @@ func scaleWorkers() {
 			// Set active to false to stop using this worker
 			worker.Active = false
 			resp, err := grequests.Post(worker.Address+"/unregister", nil)
-			defer resp.Close()
 			if err != nil {
 				return
 			}
+			defer resp.Close()
 		}
 		requestsSinceScaling = 0
 		time.Sleep(60 * time.Second)
