@@ -54,7 +54,13 @@ func main() {
 
 	register()
 	go checkMasterHealth()
-	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(conf.Own.Port), router))
+	server := &http.Server{
+		Handler:      router,
+		Addr:         "127.0.0.1:" + strconv.Itoa(conf.Own.Port),
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+	log.Fatal(server.ListenAndServe())
 	defer unregister()
 }
 
