@@ -33,14 +33,6 @@ type worker struct {
 	Active                bool
 }
 
-type HealthResponse struct {
-	MaxWorkers           int
-	MinWorkers           int
-	RequestsSinceScaling int
-	ActiveWorkers        int
-	Workers              []*worker
-}
-
 var workers []*worker
 
 var Sess *session.Session
@@ -80,7 +72,20 @@ func main() {
 }
 
 func GetHealth(w http.ResponseWriter, r *http.Request) {
-	var response = HealthResponse{MaxWorkers: maxWorkers, MinWorkers: minWorkers, RequestsSinceScaling: requestsSinceScaling, ActiveWorkers: len(getActiveWorkers()), Workers: workers}
+	var response = struct {
+		MaxWorkers           int
+		MinWorkers           int
+		RequestsSinceScaling int
+		ActiveWorkers        int
+		Workers              []*worker
+	}{
+		MaxWorkers:           maxWorkers,
+		MinWorkers:           minWorkers,
+		RequestsSinceScaling: requestsSinceScaling,
+		ActiveWorkers:        len(getActiveWorkers()),
+		Workers:              workers,
+	}
+
 	js, err := json.Marshal(response)
 	if err != nil {
 		util.InternalServerError(w, "Health could not be retrieved", err)
