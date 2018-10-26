@@ -32,13 +32,17 @@ var config Config
 
 var g graphs.Graph
 
+type task struct {
+	Graph      *graphs.Graph
+	Parameters map[string][]string
+}
+
 type worker struct {
 	Address               string
 	InstanceId            string
 	LastResponseTimestamp int64
 	Healty                bool
-	Active                bool
-	GraphsProcessing      []uuid.UUID
+	TasksProcessing       []task
 }
 
 var workers []*worker
@@ -185,7 +189,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	g = graph
 
-	if len(workers) == 0 {
+	if len(getActiveWorkers()) == 0 {
 		util.InternalServerError(w, "No workers found", nil)
 		return
 	}
@@ -206,7 +210,6 @@ func registerWorker(w http.ResponseWriter, r *http.Request) {
 		util.BadRequest(w, "Error unmarshaling body", err)
 		return
 	}
-	newWorker.Active = true
 	newWorker.LastResponseTimestamp = time.Now().Unix()
 	workers = append(workers, &newWorker)
 	util.GeneralResponse(w, true, "Worker: "+newWorker.InstanceId+" successfully registered!")
@@ -237,6 +240,10 @@ func unregisterWorker(oldWorker *worker) {
 	if oldWorker.InstanceId != "" {
 		TerminateWorkers([]*worker{oldWorker})
 	}
+	//Redistribute graphs this worker was still processing
+	for _, task := range oldWorker.TasksProcessing {
+		distributeGraph(task.Graph, task.Parameters)
+	}
 }
 
 func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
@@ -247,8 +254,8 @@ func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 		var worker = activeWorkers[rand.Intn(len(activeWorkers))]
 		err := sendGraphToWorker(*graph, worker, parameters)
 		if err == nil {
-			// TODO remove from thist list again when processing is done by worker
-			worker.GraphsProcessing = append(worker.GraphsProcessing, graph.Id)
+			// TODO remove from this list again when processing is done by worker
+			worker.TasksProcessing = append(worker.TasksProcessing, task{graph, parameters})
 			break
 		}
 		fmt.Println("Cannot distributes graph to: " + worker.Address)
@@ -293,30 +300,24 @@ func getWorkersHealth() {
 }
 
 func scaleWorkers() {
-	requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": config.ApiKey}}
 	for {
+		time.Sleep(60 * time.Second)
+
 		var activeWorkers = getActiveWorkers()
 		if len(activeWorkers) < minWorkers || (len(activeWorkers) < config.MaxWorkers && (requestsSinceScaling/len(activeWorkers)) > 3) {
 			StartNewWorker()
 		} else if len(activeWorkers) > minWorkers && (requestsSinceScaling/len(activeWorkers)) < 2 {
 			worker := activeWorkers[0]
-			// Set active to false to stop using this worker
-			worker.Active = false
-			resp, err := grequests.Post(worker.Address+"/unregister", &requestOptions)
-			if err != nil {
-				return
-			}
-			defer resp.Close()
+			unregisterWorker(worker)
 		}
 		requestsSinceScaling = 0
-		time.Sleep(60 * time.Second)
 	}
 }
 
 func getActiveWorkers() []*worker {
 	var result []*worker
 	for _, worker := range workers {
-		if worker.Active && worker.Healty {
+		if worker.Healty {
 			result = append(result, worker)
 		}
 	}
