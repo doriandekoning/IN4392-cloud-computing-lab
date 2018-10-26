@@ -38,6 +38,7 @@ type worker struct {
 	LastResponseTimestamp int64
 	Healty                bool
 	Active                bool
+	GraphsProcessing      []uuid.UUID
 }
 
 var workers []*worker
@@ -240,12 +241,19 @@ func unregisterWorker(oldWorker *worker) {
 
 func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 	var activeWorkers = getActiveWorkers()
-	// Distribute graph among workers by randomly selecting a worker
-	// possible improvement select the worker which has the shortest queue
-	var worker = activeWorkers[rand.Intn(len(activeWorkers))]
-	err := sendGraphToWorker(*graph, worker, parameters)
-	if err != nil {
+	for {
+		// Distribute graph among workers by randomly selecting a worker
+		// possible improvement select the worker which has the shortest queue
+		var worker = activeWorkers[rand.Intn(len(activeWorkers))]
+		err := sendGraphToWorker(*graph, worker, parameters)
+		if err == nil {
+			// TODO remove from thist list again when processing is done by worker
+			worker.GraphsProcessing = append(worker.GraphsProcessing, graph.Id)
+			break
+		}
 		fmt.Println("Cannot distributes graph to: " + worker.Address)
+		//Try again in 10 sec
+		time.Sleep(10 * time.Second)
 	}
 }
 
