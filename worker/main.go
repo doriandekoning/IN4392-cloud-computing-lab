@@ -26,8 +26,9 @@ type Config struct {
 		Address string
 	}
 	Own struct {
-		Port    int
-		Address string
+		Port       int
+		Address    string
+		Instanceid string `envconfig:"optional"`
 	}
 }
 
@@ -49,10 +50,17 @@ func main() {
 	router.Use(middleware.LoggingMiddleWare)
 	router.HandleFunc("/health", GetHealth)
 	router.HandleFunc("/graph", ReceiveGraph).Methods("POST")
+	router.HandleFunc("/unregister", UnRegisterRequest).Methods("POST")
 
 	register()
 	go checkMasterHealth()
-	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(conf.Own.Port), router))
+	server := &http.Server{
+		Handler:      router,
+		Addr:         ":" + strconv.Itoa(conf.Own.Port),
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+	log.Fatal(server.ListenAndServe())
 	defer unregister()
 }
 
@@ -60,15 +68,21 @@ func GetHealth(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func UnRegisterRequest(w http.ResponseWriter, r *http.Request) {
+	// TODO check if this worker is still processing a graph and when done unregister there shouldn't be any new requests coming in
+	unregister()
+}
+
 func register() {
 	for {
 		options := grequests.RequestOptions{
-			JSON:    map[string]string{"address": getOwnURL()},
+			JSON:    map[string]string{"address": getOwnURL(), "instanceId": conf.Own.Instanceid},
 			Headers: map[string]string{"Content-Type": "application/json"},
 		}
-		_, err := grequests.Post(getMasterURL()+"/worker/register", &options)
+		resp, err := grequests.Post(getMasterURL()+"/worker/register", &options)
 		if err == nil {
 			fmt.Println("Successfully registered")
+			defer resp.Close()
 			break
 		}
 		fmt.Println("Unable to register", err)
@@ -79,14 +93,15 @@ func register() {
 
 func unregister() {
 	options := grequests.RequestOptions{
-		JSON:    map[string]string{"address": getOwnURL()},
+		JSON:    map[string]string{"address": getOwnURL(), "instanceId": conf.Own.Instanceid},
 		Headers: map[string]string{"Content-Type": "application/json"},
 	}
-	_, err := grequests.Delete(getMasterURL()+"/worker/unregister", &options)
+	resp, err := grequests.Delete(getMasterURL()+"/worker/unregister", &options)
 	if err != nil {
 		fmt.Println("Unable to register, error:", err)
 		return
 	}
+	defer resp.Close()
 	fmt.Println("Sucessfully unregistered")
 
 }
@@ -171,10 +186,12 @@ outerloop:
 
 func checkMasterHealth() {
 	for {
-		_, err := grequests.Get(getMasterURL()+"/health", nil)
+		resp, err := grequests.Get(getMasterURL()+"/health", nil)
 		if err != nil {
 			fmt.Println("Master seems to be offline")
 			register()
+		} else {
+			defer resp.Close()
 		}
 		time.Sleep(10 * time.Second)
 	}
