@@ -30,6 +30,7 @@ type Config struct {
 		Address    string
 		Instanceid string `envconfig:"optional"`
 	}
+	ApiKey string
 }
 
 type worker struct {
@@ -48,6 +49,8 @@ func main() {
 
 	router := mux.NewRouter()
 	router.Use(middleware.LoggingMiddleWare)
+	authenticationMiddleware := middleware.AuthenticationMiddleware{ApiKey: conf.ApiKey}
+	router.Use(authenticationMiddleware.Middleware)
 	router.HandleFunc("/health", GetHealth)
 	router.HandleFunc("/graph", ReceiveGraph).Methods("POST")
 	router.HandleFunc("/unregister", UnRegisterRequest).Methods("POST")
@@ -77,7 +80,7 @@ func register() {
 	for {
 		options := grequests.RequestOptions{
 			JSON:    map[string]string{"address": getOwnURL(), "instanceId": conf.Own.Instanceid},
-			Headers: map[string]string{"Content-Type": "application/json"},
+			Headers: map[string]string{"Content-Type": "application/json", "X-Auth": conf.ApiKey},
 		}
 		resp, err := grequests.Post(getMasterURL()+"/worker/register", &options)
 		if err == nil {
@@ -94,7 +97,7 @@ func register() {
 func unregister() {
 	options := grequests.RequestOptions{
 		JSON:    map[string]string{"address": getOwnURL(), "instanceId": conf.Own.Instanceid},
-		Headers: map[string]string{"Content-Type": "application/json"},
+		Headers: map[string]string{"Content-Type": "application/json", "X-Auth": conf.ApiKey},
 	}
 	resp, err := grequests.Delete(getMasterURL()+"/worker/unregister", &options)
 	if err != nil {
@@ -185,8 +188,10 @@ outerloop:
 }
 
 func checkMasterHealth() {
+	requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": conf.ApiKey}}
 	for {
-		resp, err := grequests.Get(getMasterURL()+"/health", nil)
+		resp, err := grequests.Get(getMasterURL()+"/health", &requestOptions)
+
 		if err != nil {
 			fmt.Println("Master seems to be offline")
 			register()

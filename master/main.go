@@ -9,7 +9,6 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 
@@ -21,7 +20,15 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/levigross/grequests"
 	uuid "github.com/satori/go.uuid"
+	"github.com/vrischmann/envconfig"
 )
+
+type Config struct {
+	ApiKey     string
+	MaxWorkers int
+}
+
+var config Config
 
 var g graphs.Graph
 
@@ -37,17 +44,17 @@ var workers []*worker
 
 var Sess *session.Session
 
-var maxWorkers int
-
 const minWorkers = 1
 
 var requestsSinceScaling = 0
 
 func main() {
 
-	var err error
+	err := envconfig.Init(&config)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	maxWorkers, err = strconv.Atoi(os.Getenv("MAXWORKERS"))
 	Sess, err = session.NewSession(&aws.Config{
 		Region: aws.String("us-east-1"),
 	})
@@ -58,6 +65,8 @@ func main() {
 
 	router := mux.NewRouter()
 	router.Use(middleware.LoggingMiddleWare)
+	authenticationMiddleware := middleware.AuthenticationMiddleware{ApiKey: config.ApiKey}
+	router.Use(authenticationMiddleware.Middleware)
 	router.HandleFunc("/health", GetHealth).Methods("GET")
 	router.HandleFunc("/killworkers", KillWorkersRequest).Methods("GET")
 	router.HandleFunc("/addworker", AddWorkerRequest).Methods("GET")
@@ -86,7 +95,7 @@ func GetHealth(w http.ResponseWriter, r *http.Request) {
 		ActiveWorkers        int
 		Workers              []*worker
 	}{
-		MaxWorkers:           maxWorkers,
+		MaxWorkers:           config.MaxWorkers,
 		MinWorkers:           minWorkers,
 		RequestsSinceScaling: requestsSinceScaling,
 		ActiveWorkers:        len(getActiveWorkers()),
@@ -243,7 +252,7 @@ func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 func sendGraphToWorker(graph graphs.Graph, worker *worker, parameters map[string][]string) error {
 	options := grequests.RequestOptions{
 		JSON:    graph,
-		Headers: map[string]string{"Content-Type": "application/json"},
+		Headers: map[string]string{"Content-Type": "application/json", "X-Auth": config.ApiKey},
 		Params:  paramsMapToRequestParamsMap(parameters),
 	}
 	resp, err := grequests.Post(worker.Address+"/graph", &options)
@@ -255,9 +264,11 @@ func sendGraphToWorker(graph graphs.Graph, worker *worker, parameters map[string
 }
 
 func getWorkersHealth() {
+	requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": config.ApiKey}}
 	for {
 		for _, worker := range workers {
-			resp, err := grequests.Get(worker.Address+"/health", nil)
+			resp, err := grequests.Get(worker.Address+"/health", &requestOptions)
+
 			if err != nil {
 				worker.Healty = false
 			} else {
@@ -274,15 +285,16 @@ func getWorkersHealth() {
 }
 
 func scaleWorkers() {
+	requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": config.ApiKey}}
 	for {
 		var activeWorkers = getActiveWorkers()
-		if len(activeWorkers) < minWorkers || (len(activeWorkers) < maxWorkers && (requestsSinceScaling/len(activeWorkers)) > 3) {
+		if len(activeWorkers) < minWorkers || (len(activeWorkers) < config.MaxWorkers && (requestsSinceScaling/len(activeWorkers)) > 3) {
 			StartNewWorker()
 		} else if len(activeWorkers) > minWorkers && (requestsSinceScaling/len(activeWorkers)) < 2 {
 			worker := activeWorkers[0]
 			// Set active to false to stop using this worker
 			worker.Active = false
-			resp, err := grequests.Post(worker.Address+"/unregister", nil)
+			resp, err := grequests.Post(worker.Address+"/unregister", &requestOptions)
 			if err != nil {
 				return
 			}
