@@ -26,6 +26,9 @@ import (
 
 var g graphs.Graph
 
+var metricsFile *os.File
+var amountLogFiles int
+
 type worker struct {
 	Address              string
 	InstanceId           string
@@ -67,6 +70,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Error", err)
 	}
+	go checkPostMetrics()
 
 	router := mux.NewRouter()
 	router.Use(middleware.LoggingMiddleWare)
@@ -308,9 +312,10 @@ func paramsMapToRequestParamsMap(original map[string][]string) map[string]string
 }
 
 func ProcessMetrics(w http.ResponseWriter, r *http.Request) {
-	// TODO: Read CSV from the request and append the metrics.
 
 	csvReader := csv.NewReader(r.Body)
+
+	workerAddress := r.URL.Query()["address"][0]
 
 	for {
 		line, err := csvReader.Read()
@@ -319,7 +324,46 @@ func ProcessMetrics(w http.ResponseWriter, r *http.Request) {
 		} else if err != nil {
 			log.Fatal(err)
 		}
-
-		fmt.Printf("%s, %s, %s, %s\n", line[0], line[1], line[2], line[3])
+		_, err = metricsFile.Write([]byte(fmt.Sprintf("%s, %s, %s, %s, %s\n", workerAddress, line[0], line[1], line[2], line[3])))
+		if err != nil {
+			fmt.Println("Error writing to file")
+			return
+		}
 	}
+}
+func checkPostMetrics() {
+	var err error
+	metricsFile, err = os.Create("metrics/metrics")
+	if err != nil {
+		log.Fatal("Error creating metrics file", err)
+	}
+	for {
+		time.Sleep(10 * time.Second)
+		postMetric()
+	}
+}
+
+func postMetric() {
+	//TODO get from config
+	err := PostMetrics(metricsFile, "log"+strconv.Itoa(amountLogFiles))
+	if err != nil {
+		fmt.Println("Error posting metrics", err)
+		return
+	}
+	err = metricsFile.Close()
+	if err != nil {
+		fmt.Println("Error closing file", err)
+		return
+	}
+	err = os.Remove("metrics/metrics")
+	if err != nil {
+		fmt.Println("Error removing file", err)
+		return
+	}
+	metricsFile, err = os.Create("metrics/metrics")
+	if err != nil {
+		fmt.Println("Error opening new metrics file", err)
+		return
+	}
+	amountLogFiles++
 }
