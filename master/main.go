@@ -310,7 +310,7 @@ func getNodesHealth() {
 				node.Healthy = false
 			} else {
 				node.Healthy = true
-				worker.Healty = true
+				worker.Healthy = true
 				worker.LastResponseTimestamp = time.Now().Unix()
 			}
 			if time.Now().Unix()-worker.LastResponseTimestamp > 60 {
@@ -345,7 +345,7 @@ func scaleWorkers() {
 func getActiveWorkers() []*worker {
 	var result []*worker
 	for _, worker := range workers {
-		if worker.Active && worker.Healty {
+		if worker.Active && worker.Healthy {
 			result = append(result, worker)
 		}
 	}

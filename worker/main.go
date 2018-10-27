@@ -35,7 +35,7 @@ type Config struct {
 
 type node struct {
 	Address string
-	Healty  bool
+	Healthy bool
 }
 
 type Result struct {
