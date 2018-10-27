@@ -30,6 +30,7 @@ type Config struct {
 		Port    int
 		Address string
 	}
+	ApiKey string
 }
 
 type Result struct {
@@ -75,7 +76,7 @@ func register() {
 	for {
 		options := grequests.RequestOptions{
 			JSON:    map[string]string{"address": getOwnURL()},
-			Headers: map[string]string{"Content-Type": "application/json"},
+			Headers: map[string]string{"Content-Type": "application/json", "X-Auth": conf.ApiKey},
 		}
 		resp, err := grequests.Post(getMasterURL()+"/storage/register", &options)
 		if err == nil && resp.StatusCode < 300 {
@@ -91,7 +92,7 @@ func register() {
 func unregister() {
 	options := grequests.RequestOptions{
 		JSON:    map[string]string{"address": getOwnURL()},
-		Headers: map[string]string{"Content-Type": "application/json"},
+		Headers: map[string]string{"Content-Type": "application/json", "X-Auth": conf.ApiKey},
 	}
 	resp, err := grequests.Delete(getMasterURL()+"/storage/unregister", &options)
 	if err != nil && resp.StatusCode >= 300 {
@@ -111,8 +112,11 @@ func getOwnURL() string {
 }
 
 func checkMasterHealth() {
+	options := grequests.RequestOptions{
+		Headers: map[string]string{"X-Auth": conf.ApiKey},
+	}
 	for {
-		_, err := grequests.Get(getMasterURL()+"/health", nil)
+		_, err := grequests.Get(getMasterURL()+"/health", &options)
 		if err != nil {
 			fmt.Println("Master seems to be offline")
 			register()

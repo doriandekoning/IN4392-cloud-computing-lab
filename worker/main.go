@@ -196,7 +196,8 @@ func checkMasterHealth() {
 
 func writeResultToStorage(result *Result) {
 	//TODO maybe return this from health
-	resp, err := grequests.Get(getMasterURL()+"/storagenode", nil)
+	requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": conf.ApiKey}}
+	resp, err := grequests.Get(getMasterURL()+"/storagenode", &requestOptions)
 	if err != nil || resp.StatusCode >= 300 {
 		fmt.Println("Error when trying to get storage node adresses from master: ", resp.StatusCode, err)
 		return
@@ -209,7 +210,7 @@ func writeResultToStorage(result *Result) {
 	}
 	options := grequests.RequestOptions{
 		JSON:    result,
-		Headers: map[string]string{"Content-Type": "application/json"},
+		Headers: map[string]string{"Content-Type": "application/json", "X-Auth": conf.ApiKey},
 	}
 	respChannel := make(chan int)
 	for i := 0; i < len(storageNodes); i++ {
