@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"math/rand"
 	"net/http"
 	"strconv"
 	"time"
@@ -191,10 +190,9 @@ func writeResultToStorage(result *Result) {
 		Headers: map[string]string{"Content-Type": "application/json"},
 	}
 	//Choose a random node to write to
-	startNode := rand.Intn(len(storageNodes))
 	respChannel := make(chan int)
 	for i := 0; i < len(storageNodes); i++ {
-		go writeResultToSpecificStorageNode(storageNodes[(startNode+i)%len(storageNodes)], options, respChannel)
+		go writeResultToSpecificStorageNode(storageNodes[i], options, respChannel)
 	}
 	var successfullWrites int
 	var writesNeeded = (len(storageNodes) + 1) / 2
