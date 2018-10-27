@@ -58,7 +58,7 @@ func main() {
 	go checkMasterHealth()
 	server := &http.Server{
 		Handler:      router,
-		Addr:         "127.0.0.1" + strconv.Itoa(conf.Own.Port),
+		Addr:         ":" + strconv.Itoa(conf.Own.Port),
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
