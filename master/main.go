@@ -70,7 +70,11 @@ func main() {
 	if err != nil {
 		log.Fatal("Error", err)
 	}
-	go checkPostMetrics()
+	metricsFile, err = os.Create("metrics/metrics")
+	if err != nil {
+		log.Fatal("Error", err)
+	}
+	defer postMetric()
 
 	router := mux.NewRouter()
 	router.Use(middleware.LoggingMiddleWare)
@@ -318,6 +322,7 @@ func ProcessMetrics(w http.ResponseWriter, r *http.Request) {
 	workerAddress := r.URL.Query()["address"][0]
 
 	for {
+		fmt.Println("AAGH", r.Body)
 		line, err := csvReader.Read()
 		if err == io.EOF {
 			break
@@ -325,26 +330,26 @@ func ProcessMetrics(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err)
 		}
 		_, err = metricsFile.Write([]byte(fmt.Sprintf("%s, %s, %s, %s, %s\n", workerAddress, line[0], line[1], line[2], line[3])))
+		fmt.Println("Error writing to file")
+
 		if err != nil {
 			fmt.Println("Error writing to file")
 			return
 		}
 	}
-}
-func checkPostMetrics() {
-	var err error
-	metricsFile, err = os.Create("metrics/metrics")
+	fileStat, err := metricsFile.Stat()
 	if err != nil {
-		log.Fatal("Error creating metrics file", err)
+		log.Fatal("Error getting logfile stats", err)
+		return
 	}
-	for {
-		time.Sleep(10 * time.Second)
+	//If file is larger then 10mb post it
+	if fileStat.Size() > 10*100 { //1000000 {
 		postMetric()
 	}
 }
 
 func postMetric() {
-	//TODO get from config
+	//TODO get name from config
 	err := PostMetrics(metricsFile, "log"+strconv.Itoa(amountLogFiles))
 	if err != nil {
 		fmt.Println("Error posting metrics", err)
