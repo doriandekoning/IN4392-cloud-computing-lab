@@ -32,7 +32,7 @@ var config Config
 
 var g graphs.Graph
 
-type worker struct {
+type node struct {
 	Address               string
 	InstanceId            string
 	LastResponseTimestamp int64
@@ -74,10 +74,10 @@ func main() {
 	router.HandleFunc("/processgraph", ProcessGraph).Methods("POST")
 	router.HandleFunc("/{nodetype}/register", registerNode).Methods("POST")
 	router.HandleFunc("/storagenode", listStorageNodes).Methods("GET")
-	router.HandleFunc("/worker/unregister", unregisterWorker).Methods("DELETE")
+	router.HandleFunc("/worker/unregister", unregisterWorkerRequest).Methods("DELETE")
 	router.HandleFunc("/result/{processingRequestId}", getResult).Methods("GET")
 
-  go scaleWorkers()
+	go scaleWorkers()
 	go getNodesHealth()
 	server := &http.Server{
 		Handler:      router,
@@ -96,7 +96,7 @@ func GetHealth(w http.ResponseWriter, r *http.Request) {
 		MinWorkers           int
 		RequestsSinceScaling int
 		ActiveWorkers        int
-		Workers              []*worker
+		Workers              []*node
 	}{
 		MaxWorkers:           config.MaxWorkers,
 		MinWorkers:           minWorkers,
@@ -200,9 +200,8 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	w.Write(idBytes)
 }
 
-
 func registerWorker(w http.ResponseWriter, r *http.Request) {
-	var newWorker worker
+	var newWorker node
 
 	b, _ := ioutil.ReadAll(r.Body)
 	err := json.Unmarshal(b, &newWorker)
@@ -217,7 +216,7 @@ func registerWorker(w http.ResponseWriter, r *http.Request) {
 }
 
 func unregisterWorkerRequest(w http.ResponseWriter, r *http.Request) {
-	var oldWorker worker
+	var oldWorker node
 	bodyBytes, _ := ioutil.ReadAll(r.Body)
 	err := json.Unmarshal(bodyBytes, &oldWorker)
 	if err != nil {
@@ -228,7 +227,7 @@ func unregisterWorkerRequest(w http.ResponseWriter, r *http.Request) {
 	util.GeneralResponse(w, true, "Worker: "+oldWorker.InstanceId+" successfully unregistered!")
 }
 
-func unregisterWorker(oldWorker *worker) {
+func unregisterWorker(oldWorker *node) {
 	for index, worker := range workers {
 		if worker.Address == oldWorker.Address {
 			//Move last worker to location of worker to remove
@@ -239,7 +238,7 @@ func unregisterWorker(oldWorker *worker) {
 		}
 	}
 	if oldWorker.InstanceId != "" {
-		TerminateWorkers([]*worker{oldWorker})
+		TerminateWorkers([]*node{oldWorker})
 	}
 }
 
@@ -302,7 +301,7 @@ func sendGraphToWorker(graph graphs.Graph, worker *node, parameters map[string][
 }
 
 func getNodesHealth() {
-  requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": config.ApiKey}}
+	requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": config.ApiKey}}
 	for {
 		for _, node := range append(workers, storageNodes...) {
 			_, err := grequests.Get(node.Address+"/health", &requestOptions)
@@ -310,11 +309,10 @@ func getNodesHealth() {
 				node.Healthy = false
 			} else {
 				node.Healthy = true
-				worker.Healthy = true
-				worker.LastResponseTimestamp = time.Now().Unix()
+				node.LastResponseTimestamp = time.Now().Unix()
 			}
-			if time.Now().Unix()-worker.LastResponseTimestamp > 60 {
-				unregisterWorker(worker)
+			if time.Now().Unix()-node.LastResponseTimestamp > 60 {
+				unregisterWorker(node)
 			}
 		}
 		time.Sleep(30 * time.Second)
@@ -342,8 +340,8 @@ func scaleWorkers() {
 	}
 }
 
-func getActiveWorkers() []*worker {
-	var result []*worker
+func getActiveWorkers() []*node {
+	var result []*node
 	for _, worker := range workers {
 		if worker.Active && worker.Healthy {
 			result = append(result, worker)
