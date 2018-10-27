@@ -16,6 +16,7 @@ import (
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/util"
 	"github.com/gorilla/mux"
 	"github.com/levigross/grequests"
+	uuid "github.com/satori/go.uuid"
 	"github.com/vrischmann/envconfig"
 )
 
@@ -134,7 +135,10 @@ func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 		util.BadRequest(w, "Cannot unmarshal graph", err)
 		return
 	}
+	go ProcessGraph(graph, algorithm, maxSteps)
+}
 
+func ProcessGraph(graph graphs.Graph, algorithm string, maxSteps int) {
 	var instance graphs.AlgorithmInterface
 	switch algorithm {
 	case "pagerank":
@@ -178,7 +182,28 @@ outerloop:
 	csvWriter.Flush()
 	//TODO send to storage
 	fmt.Println(buf.String())
+	time.Sleep(20 * time.Second)
+	notifyMasterOnProcessCompletion(graph.Id)
+}
 
+func notifyMasterOnProcessCompletion(graphId uuid.UUID) {
+	requestOptions := grequests.RequestOptions{
+		JSON: struct {
+			RequestId  uuid.UUID
+			InstanceId string
+		}{
+			RequestId:  graphId,
+			InstanceId: conf.Own.Instanceid,
+		},
+		Headers: map[string]string{"Content-Type": "application/json", "X-Auth": conf.ApiKey},
+	}
+
+	resp, err := grequests.Post(getMasterURL()+"/worker/done", &requestOptions)
+	if err != nil {
+		fmt.Println("Unable to notify master about finishing processing a graph, error:", err)
+		return
+	}
+	defer resp.Close()
 }
 
 func checkMasterHealth() {

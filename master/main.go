@@ -77,6 +77,7 @@ func main() {
 	router.HandleFunc("/addworker", AddWorkerRequest).Methods("GET")
 	router.HandleFunc("/processgraph", ProcessGraph).Methods("POST")
 	router.HandleFunc("/worker/register", registerWorker).Methods("POST")
+	router.HandleFunc("/worker/done", workerDoneProcessing).Methods("POST")
 	router.HandleFunc("/worker/unregister", unregisterWorkerRequest).Methods("DELETE")
 
 	go scaleWorkers()
@@ -130,6 +131,38 @@ func KillWorkersRequest(w http.ResponseWriter, r *http.Request) {
 func AddWorkerRequest(w http.ResponseWriter, r *http.Request) {
 	StartNewWorker()
 	util.GeneralResponse(w, true, "New worker started")
+}
+
+func workerDoneProcessing(w http.ResponseWriter, r *http.Request) {
+	b, _ := ioutil.ReadAll(r.Body)
+	type payload struct {
+		RequestId  string
+		InstanceId string
+	}
+	var actualPayload payload
+	err := json.Unmarshal(b, &actualPayload)
+	if err != nil {
+		util.BadRequest(w, "Error unmarshaling body", err)
+		return
+	}
+	processingRequestId, err := uuid.FromString(actualPayload.RequestId)
+	if err != nil {
+		util.BadRequest(w, "Error parsing processingRequestId", err)
+		return
+	}
+	var worker = getWorker(actualPayload.InstanceId)
+	if worker == nil {
+		util.BadRequest(w, "Error finding worker instanceId", err)
+		return
+	}
+
+	for index, job := range worker.TasksProcessing {
+		if job.Graph.Id == processingRequestId {
+			worker.TasksProcessing[index] = worker.TasksProcessing[len(worker.TasksProcessing)-1]
+			worker.TasksProcessing = worker.TasksProcessing[:len(worker.TasksProcessing)-1]
+			break
+		}
+	}
 }
 
 func ProcessGraph(w http.ResponseWriter, r *http.Request) {
@@ -254,7 +287,6 @@ func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 		var worker = activeWorkers[rand.Intn(len(activeWorkers))]
 		err := sendGraphToWorker(*graph, worker, parameters)
 		if err == nil {
-			// TODO remove from this list again when processing is done by worker
 			worker.TasksProcessing = append(worker.TasksProcessing, task{graph, parameters})
 			break
 		}
@@ -322,6 +354,15 @@ func getActiveWorkers() []*worker {
 		}
 	}
 	return result
+}
+
+func getWorker(instanceId string) *worker {
+	for _, worker := range workers {
+		if worker.InstanceId == instanceId {
+			return worker
+		}
+	}
+	return nil
 }
 
 func paramsMapToRequestParamsMap(original map[string][]string) map[string]string {
