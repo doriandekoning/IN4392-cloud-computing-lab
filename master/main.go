@@ -244,6 +244,7 @@ func registerWorker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	newWorker.LastResponseTimestamp = time.Now().Unix()
+	newWorker.Healty = true
 	workers = append(workers, &newWorker)
 	util.GeneralResponse(w, true, "Worker: "+newWorker.InstanceId+" successfully registered!")
 }

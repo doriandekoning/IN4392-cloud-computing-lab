@@ -39,8 +39,13 @@ type worker struct {
 	Healty  bool
 }
 
+type task struct {
+	Graph      *graphs.Graph
+	Parameters map[string]string
+}
+
 var conf Config
-var graph graphs.Graph
+var tasks []task
 
 func main() {
 	err := envconfig.Init(&conf)
@@ -57,6 +62,7 @@ func main() {
 
 	register()
 	go checkMasterHealth()
+	go ProcessGraphsWhenAvailable()
 	server := &http.Server{
 		Handler:      router,
 		Addr:         ":" + strconv.Itoa(conf.Own.Port),
@@ -130,21 +136,39 @@ func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 		util.BadRequest(w, "Max steps is not a valid number: "+r.URL.Query().Get("maxsteps"), nil)
 		return
 	}
+	var graph graphs.Graph
 	err = json.Unmarshal(b, &graph)
 	if err != nil {
 		util.BadRequest(w, "Cannot unmarshal graph", err)
 		return
 	}
-	go ProcessGraph(graph, algorithm, maxSteps)
+	tasks = append(tasks, task{&graph, map[string]string{"algorithm": algorithm, "maxSteps": r.URL.Query().Get("maxsteps")}})
 }
 
-func ProcessGraph(graph graphs.Graph, algorithm string, maxSteps int) {
+func ProcessGraphsWhenAvailable() {
+	for {
+		for len(tasks) > 0 {
+			task := tasks[0]
+			tasks = tasks[1:]
+			ProcessGraph(task.Graph, task.Parameters)
+		}
+		time.Sleep(1 * time.Second)
+	}
+}
+
+func ProcessGraph(graph *graphs.Graph, parameters map[string]string) {
+	algorithm := parameters["algorithm"]
+	maxSteps, err := strconv.Atoi(parameters["maxSteps"])
+	if err != nil || maxSteps < 1 {
+		fmt.Println("Invalid maxSteps parameter")
+		return
+	}
 	var instance graphs.AlgorithmInterface
 	switch algorithm {
 	case "pagerank":
-		instance = &graphs.PagerankInstance{Graph: &graph, MaxSteps: maxSteps}
+		instance = &graphs.PagerankInstance{Graph: graph, MaxSteps: maxSteps}
 	case "shortestpath":
-		instance = &graphs.ShortestPathInstance{Graph: &graph}
+		instance = &graphs.ShortestPathInstance{Graph: graph}
 	default:
 		fmt.Println("Algorithm not found")
 		return
@@ -153,7 +177,7 @@ func ProcessGraph(graph graphs.Graph, algorithm string, maxSteps int) {
 	instance.Initialize()
 
 	for _, node := range graph.Nodes {
-		node.Graph = &graph
+		node.Graph = graph
 	}
 	step := 0
 outerloop:
@@ -182,7 +206,7 @@ outerloop:
 	csvWriter.Flush()
 	//TODO send to storage
 	fmt.Println(buf.String())
-	time.Sleep(20 * time.Second)
+
 	notifyMasterOnProcessCompletion(graph.Id)
 }
 
