@@ -1,14 +1,34 @@
-This is the worker.
 
 # Instal dependencis
 `go get ./..`
+
+# Set environment variables
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+export MASTER_PORT=8000
+export MASTER_ADDRESS=http://localhost
+export OWN_PORT=8888
+export OWN_ADDRESS=http://localhost
+export LOCAL=true
+export MAXWORKERS=3
 
 # Build
 ## Worker
 `go build -o bin/worker worker/main.go`
 ## Master
-`go build -o bin/master master/main.go`
+`go build -o bin/master master/*.go`
 
 # Run 
 `./bin/worker`
 `./bin/master`
+
+# Deploy
+## Worker
+`go get github.com/doriandekoning/IN4392-cloud-computing-lab/worker`
+Create a new image in AWS console and update the worker launch template with this new image.
+Set the default version of the template to the new version
+status can be checked with `sudo systemctl status worker`
+## Master
+`go get github.com/doriandekoning/IN4392-cloud-computing-lab/master`
+`sudo systemctl restart master`
+status can be checked with `sudo systemctl status master`
