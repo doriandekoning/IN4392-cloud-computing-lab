@@ -260,6 +260,8 @@ func registerNode(w http.ResponseWriter, r *http.Request) {
 		util.BadRequest(w, "Error unmarshalling storagenode registration body", err)
 		return
 	}
+	newNode.Active = true
+	newNode.Healthy = true
 	var replaced bool
 	for nodeIndex, node := range *nodesOfType {
 		if node.Address == node.Address {
@@ -277,6 +279,10 @@ func registerNode(w http.ResponseWriter, r *http.Request) {
 
 func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 	var activeWorkers = getActiveWorkers()
+	if len(activeWorkers) == 0 {
+		fmt.Println("No workers available")
+		return
+	}
 	// Distribute graph among workers by randomly selecting a worker
 	// possible improvement select the worker which has the shortest queue
 	var worker = activeWorkers[rand.Intn(len(activeWorkers))]
