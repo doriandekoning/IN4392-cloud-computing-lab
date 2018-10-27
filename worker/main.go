@@ -211,7 +211,6 @@ func writeResultToStorage(result *Result) {
 		JSON:    result,
 		Headers: map[string]string{"Content-Type": "application/json"},
 	}
-	//Choose a random node to write to
 	respChannel := make(chan int)
 	for i := 0; i < len(storageNodes); i++ {
 		go writeResultToSpecificStorageNode(storageNodes[i], options, respChannel)

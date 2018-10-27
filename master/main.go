@@ -261,8 +261,8 @@ func registerNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var replaced bool
-	for nodeIndex, storageNode := range *nodesOfType {
-		if storageNode.Address == newNode.Address {
+	for nodeIndex, node := range *nodesOfType {
+		if node.Address == node.Address {
 			(*nodesOfType)[nodeIndex] = &newNode
 			replaced = true
 			break
