@@ -343,7 +343,7 @@ func ProcessMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//If file is larger then 10mb post it
-	if fileStat.Size() > 10*100 { //1000000 {
+	if fileStat.Size() > 10*1000000 {
 		postMetric()
 	}
 }
