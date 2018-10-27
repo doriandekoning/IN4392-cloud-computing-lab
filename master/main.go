@@ -141,12 +141,12 @@ func unregisterWorker(w http.ResponseWriter, r *http.Request) {
 
 func registerNode(w http.ResponseWriter, r *http.Request) {
 	var newNode node
-	var allNodes *[]*node
+	var nodesOfType *[]*node
 	nodeType := mux.Vars(r)["nodetype"]
 	if nodeType == "storage" {
-		allNodes = &storageNodes
+		nodesOfType = &storageNodes
 	} else if nodeType == "worker" {
-		allNodes = &workers
+		nodesOfType = &workers
 	} else {
 		util.BadRequest(w, "Nodetype "+nodeType+" is not known", nil)
 		return
@@ -158,18 +158,18 @@ func registerNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var replaced bool
-	for storageNodeIndex, storageNode := range *allNodes {
+	for nodeIndex, storageNode := range *nodesOfType {
 		if storageNode.Address == newNode.Address {
-			storageNodes[storageNodeIndex] = &newNode
+			(*nodesOfType)[nodeIndex] = &newNode
 			replaced = true
 			break
 		}
 	}
 
 	if !replaced {
-		*allNodes = append(*allNodes, &newNode)
+		*nodesOfType = append(*nodesOfType, &newNode)
 	}
-	fmt.Println("Storage node sucessfully registered")
+	fmt.Println(nodeType + " node sucessfully registered")
 }
 
 func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
