@@ -26,6 +26,9 @@ import (
 
 var config Config
 
+var metricsFile *os.File
+var amountLogFiles int
+
 type NodeCollection []*node
 
 var g graphs.Graph
