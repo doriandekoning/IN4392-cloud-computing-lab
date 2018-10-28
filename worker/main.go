@@ -49,7 +49,7 @@ type task struct {
 }
 
 var conf Config
-var tasks []task
+var taskChannel chan task
 
 func main() {
 	err := envconfig.Init(&conf)
@@ -66,6 +66,7 @@ func main() {
 
 	register()
 	go checkMasterHealth()
+	taskChannel = make(chan task)
 	go ProcessGraphsWhenAvailable()
 	server := &http.Server{
 		Handler:      router,
@@ -136,17 +137,13 @@ func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 		util.BadRequest(w, "Cannot unmarshal graph", err)
 		return
 	}
-	tasks = append(tasks, task{&graph, map[string]string{"algorithm": algorithm, "maxSteps": r.URL.Query().Get("maxsteps")}})
+	taskChannel <- task{&graph, map[string]string{"algorithm": algorithm, "maxSteps": r.URL.Query().Get("maxsteps")}}
 }
 
 func ProcessGraphsWhenAvailable() {
 	for {
-		for len(tasks) > 0 {
-			var task task
-			task, tasks = tasks[0], tasks[1:]
-			ProcessGraph(task.Graph, task.Parameters)
-		}
-		time.Sleep(1 * time.Second)
+		task := <-taskChannel
+		ProcessGraph(task.Graph, task.Parameters)
 	}
 }
 
