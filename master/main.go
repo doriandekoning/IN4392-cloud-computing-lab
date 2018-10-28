@@ -239,21 +239,6 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	w.Write(idBytes)
 }
 
-func registerWorker(w http.ResponseWriter, r *http.Request) {
-	var newWorker node
-
-	b, _ := ioutil.ReadAll(r.Body)
-	err := json.Unmarshal(b, &newWorker)
-	if err != nil {
-		util.BadRequest(w, "Error unmarshaling body", err)
-		return
-	}
-	newWorker.LastResponseTimestamp = time.Now().Unix()
-	newWorker.Healthy = true
-	workers = append(workers, &newWorker)
-	util.GeneralResponse(w, true, "Worker: "+newWorker.InstanceId+" successfully registered!")
-}
-
 func unregisterWorkerRequest(w http.ResponseWriter, r *http.Request) {
 	var oldWorker node
 	bodyBytes, _ := ioutil.ReadAll(r.Body)
@@ -306,7 +291,7 @@ func registerNode(w http.ResponseWriter, r *http.Request) {
 	newNode.Healthy = true
 	var replaced bool
 	for nodeIndex, node := range *nodesOfType {
-		if node.Address == node.Address {
+		if newNode.Address == node.Address {
 			(*nodesOfType)[nodeIndex] = &newNode
 			replaced = true
 			break
