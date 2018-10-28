@@ -85,6 +85,7 @@ func main() {
 	router.HandleFunc("/worker/register", registerWorker).Methods("POST")
 	router.HandleFunc("/worker/unregister", unregisterWorkerRequest).Methods("DELETE")
 	router.HandleFunc("/metrics", ProcessMetrics).Methods("POST")
+	router.HandleFunc("/forcewritemetrics", forceWriteMetrics).Methods("GET")
 
 	go scaleWorkers()
 	go getWorkersHealth()
@@ -322,7 +323,7 @@ func ProcessMetrics(w http.ResponseWriter, r *http.Request) {
 	workerAddress := r.URL.Query()["address"][0]
 
 	for {
-		
+
 		line, err := csvReader.Read()
 		if err == io.EOF {
 			break
@@ -370,4 +371,8 @@ func postMetric() {
 		return
 	}
 	amountLogFiles++
+}
+
+func forceWriteMetrics(w http.ResponseWriter, r *http.Request) {
+	postMetric()
 }
