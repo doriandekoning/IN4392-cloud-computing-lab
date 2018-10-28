@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"math/rand"
 	"net/http"
 	"strconv"
 	"time"
@@ -30,7 +29,14 @@ type Config struct {
 
 var config Config
 
+type NodeCollection []*node
+
 var g graphs.Graph
+
+type task struct {
+	Graph      *graphs.Graph
+	Parameters map[string][]string
+}
 
 type node struct {
 	Address               string
@@ -38,16 +44,15 @@ type node struct {
 	LastResponseTimestamp int64
 	Healthy               bool
 	Active                bool
+	TasksProcessing       []task
 }
 
-var workers []*node
-var storageNodes []*node
+var workers NodeCollection
+var storageNodes NodeCollection
 
 var Sess *session.Session
 
 const minWorkers = 1
-
-var requestsSinceScaling = 0
 
 func main() {
 
@@ -73,6 +78,7 @@ func main() {
 	router.HandleFunc("/addworker", AddWorkerRequest).Methods("GET")
 	router.HandleFunc("/processgraph", ProcessGraph).Methods("POST")
 	router.HandleFunc("/{nodetype}/register", registerNode).Methods("POST")
+	router.HandleFunc("/worker/done", workerDoneProcessing).Methods("GET")
 	router.HandleFunc("/storagenode", listStorageNodes).Methods("GET")
 	router.HandleFunc("/worker/unregister", unregisterWorkerRequest).Methods("DELETE")
 	router.HandleFunc("/result/{processingRequestId}", getResult).Methods("GET")
@@ -92,17 +98,15 @@ func main() {
 
 func GetHealth(w http.ResponseWriter, r *http.Request) {
 	var response = struct {
-		MaxWorkers           int
-		MinWorkers           int
-		RequestsSinceScaling int
-		ActiveWorkers        int
-		Workers              []*node
+		MaxWorkers    int
+		MinWorkers    int
+		ActiveWorkers int
+		Workers       []*node
 	}{
-		MaxWorkers:           config.MaxWorkers,
-		MinWorkers:           minWorkers,
-		RequestsSinceScaling: requestsSinceScaling,
-		ActiveWorkers:        len(getActiveWorkers()),
-		Workers:              workers,
+		MaxWorkers:    config.MaxWorkers,
+		MinWorkers:    minWorkers,
+		ActiveWorkers: len(workers.filter(true, true)),
+		Workers:       workers,
 	}
 
 	js, err := json.Marshal(response)
@@ -130,8 +134,30 @@ func AddWorkerRequest(w http.ResponseWriter, r *http.Request) {
 	util.GeneralResponse(w, true, "New worker started")
 }
 
+func workerDoneProcessing(w http.ResponseWriter, r *http.Request) {
+	processingRequestId, err := uuid.FromString(r.URL.Query().Get("requestID"))
+	if err != nil {
+		util.BadRequest(w, "Error parsing processingRequestId", err)
+		return
+	}
+
+	instanceId := r.URL.Query().Get("instanceID")
+	var worker = getNode(instanceId)
+	if worker == nil {
+		util.BadRequest(w, "Error finding worker instanceId", err)
+		return
+	}
+
+	for index, job := range worker.TasksProcessing {
+		if job.Graph.Id == processingRequestId {
+			worker.TasksProcessing[index] = worker.TasksProcessing[len(worker.TasksProcessing)-1]
+			worker.TasksProcessing = worker.TasksProcessing[:len(worker.TasksProcessing)-1]
+			break
+		}
+	}
+}
+
 func ProcessGraph(w http.ResponseWriter, r *http.Request) {
-	requestsSinceScaling++
 	csvReader := csv.NewReader(r.Body)
 	//Parse first line with vertex weights
 	line, err := csvReader.Read()
@@ -187,13 +213,13 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	g = graph
 
-	if len(workers) == 0 {
+	if len(workers.filter(true, true)) == 0 {
 		util.InternalServerError(w, "No workers found", nil)
 		return
 	}
 	//Asynchronously distribute the graph
 	go distributeGraph(&graph, r.URL.Query())
-	w.WriteHeader(http.StatusAccepted)
+
 	//Write id to response
 	idBytes, _ := graph.Id.MarshalText()
 	w.WriteHeader(http.StatusAccepted)
@@ -209,8 +235,8 @@ func registerWorker(w http.ResponseWriter, r *http.Request) {
 		util.BadRequest(w, "Error unmarshaling body", err)
 		return
 	}
-	newWorker.Active = true
 	newWorker.LastResponseTimestamp = time.Now().Unix()
+	newWorker.Healthy = true
 	workers = append(workers, &newWorker)
 	util.GeneralResponse(w, true, "Worker: "+newWorker.InstanceId+" successfully registered!")
 }
@@ -240,11 +266,15 @@ func unregisterWorker(oldWorker *node) {
 	if oldWorker.InstanceId != "" {
 		TerminateWorkers([]*node{oldWorker})
 	}
+	//Redistribute graphs this worker was still processing
+	for _, task := range oldWorker.TasksProcessing {
+		distributeGraph(task.Graph, task.Parameters)
+	}
 }
 
 func registerNode(w http.ResponseWriter, r *http.Request) {
 	var newNode node
-	var nodesOfType *[]*node
+	var nodesOfType *NodeCollection
 	nodeType := mux.Vars(r)["nodetype"]
 	if nodeType == "storage" {
 		nodesOfType = &storageNodes
@@ -260,7 +290,6 @@ func registerNode(w http.ResponseWriter, r *http.Request) {
 		util.BadRequest(w, "Error unmarshalling storagenode registration body", err)
 		return
 	}
-	newNode.Active = true
 	newNode.Healthy = true
 	var replaced bool
 	for nodeIndex, node := range *nodesOfType {
@@ -275,21 +304,38 @@ func registerNode(w http.ResponseWriter, r *http.Request) {
 		*nodesOfType = append(*nodesOfType, &newNode)
 	}
 	fmt.Println(nodeType + " node sucessfully registered")
+
 }
 
 func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
-	var activeWorkers = getActiveWorkers()
+	var activeWorkers = workers.filter(true, true)
 	if len(activeWorkers) == 0 {
 		fmt.Println("No workers available")
 		return
 	}
-	// Distribute graph among workers by randomly selecting a worker
-	// possible improvement select the worker which has the shortest queue
-	var worker = activeWorkers[rand.Intn(len(activeWorkers))]
-	err := sendGraphToWorker(*graph, worker, parameters)
-	if err != nil {
+	for {
+		// Distribute graph among workers
+		worker := getLeastBusyWorker()
+		err := sendGraphToWorker(*graph, worker, parameters)
+		if err == nil {
+			worker.TasksProcessing = append(worker.TasksProcessing, task{graph, parameters})
+			break
+		}
 		fmt.Println("Cannot distributes graph to: " + worker.Address)
+		//Try again in 10 sec
+		time.Sleep(10 * time.Second)
 	}
+}
+
+func getLeastBusyWorker() *node {
+	activeWorkers := workers.filter(true, true)
+	leastBusyWorker := activeWorkers[0]
+	for _, worker := range workers {
+		if len(worker.TasksProcessing) < len(leastBusyWorker.TasksProcessing) {
+			leastBusyWorker = worker
+		}
+	}
+	return leastBusyWorker
 }
 
 func sendGraphToWorker(graph graphs.Graph, worker *node, parameters map[string][]string) error {
@@ -326,34 +372,52 @@ func getNodesHealth() {
 }
 
 func scaleWorkers() {
-	requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": config.ApiKey}}
 	for {
-		var activeWorkers = getActiveWorkers()
-		if len(activeWorkers) < minWorkers || (len(activeWorkers) < config.MaxWorkers && (requestsSinceScaling/len(activeWorkers)) > 3) {
-			StartNewWorker()
-		} else if len(activeWorkers) > minWorkers && (requestsSinceScaling/len(activeWorkers)) < 2 {
-			worker := activeWorkers[0]
-			// Set active to false to stop using this worker
-			worker.Active = false
-			resp, err := grequests.Post(worker.Address+"/unregister", &requestOptions)
-			if err != nil {
-				return
+		time.Sleep(20 * time.Second)
+
+		//Check scaling up
+		const queueSizeThreshold = 2
+		var inactiveHealthyWorkers = workers.filter(false, true)
+		leastBusyWorker := getLeastBusyWorker()
+
+		if len(leastBusyWorker.TasksProcessing) >= queueSizeThreshold {
+			if len(inactiveHealthyWorkers) > 0 {
+				inactiveHealthyWorkers[0].Active = true
+			} else {
+				StartNewWorker()
 			}
-			defer resp.Close()
 		}
-		requestsSinceScaling = 0
-		time.Sleep(60 * time.Second)
+		//Check for scaling down
+		const scaleDownThreshold = 2
+		if len(leastBusyWorker.TasksProcessing) < scaleDownThreshold {
+			leastBusyWorker.Active = false
+		}
+		for _, worker := range inactiveHealthyWorkers {
+			if len(worker.TasksProcessing) == 0 {
+				unregisterWorker(worker)
+			}
+		}
+
 	}
 }
 
-func getActiveWorkers() []*node {
-	var result []*node
-	for _, worker := range workers {
-		if worker.Active && worker.Healthy {
-			result = append(result, worker)
+func (NodeCollection) filter(active, healthy bool) NodeCollection {
+	var result NodeCollection
+	for _, node := range workers {
+		if node.Active == active && node.Healthy == healthy {
+			result = append(result, node)
 		}
 	}
 	return result
+}
+
+func getNode(instanceId string) *node {
+	for _, worker := range workers {
+		if worker.InstanceId == instanceId {
+			return worker
+		}
+	}
+	return nil
 }
 
 func paramsMapToRequestParamsMap(original map[string][]string) map[string]string {

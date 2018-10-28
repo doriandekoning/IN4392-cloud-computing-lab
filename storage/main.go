@@ -41,7 +41,6 @@ type Result struct {
 
 var conf Config
 var graph graphs.Graph
-
 func main() {
 	err := envconfig.Init(&conf)
 	if err != nil {
