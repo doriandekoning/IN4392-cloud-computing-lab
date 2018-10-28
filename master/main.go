@@ -373,11 +373,10 @@ func getNodesHealth() {
 
 func scaleWorkers() {
 	for {
-		time.Sleep(60 * time.Second)
+		time.Sleep(20 * time.Second)
 
 		//Check scaling up
 		const queueSizeThreshold = 2
-		var activeHealthyWorkers = workers.filter(true, true)
 		var inactiveHealthyWorkers = workers.filter(false, true)
 		leastBusyWorker := getLeastBusyWorker()
 
@@ -390,10 +389,8 @@ func scaleWorkers() {
 		}
 		//Check for scaling down
 		const scaleDownThreshold = 2
-		for _, worker := range activeHealthyWorkers {
-			if len(worker.TasksProcessing) < scaleDownThreshold {
-				worker.Active = false
-			}
+		if len(leastBusyWorker.TasksProcessing) < scaleDownThreshold {
+			leastBusyWorker.Active = false
 		}
 		for _, worker := range inactiveHealthyWorkers {
 			if len(worker.TasksProcessing) == 0 {
