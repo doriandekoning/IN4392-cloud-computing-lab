@@ -396,7 +396,7 @@ func scaleWorkers() {
 		if len(workers) == 0 {
 			StartNewWorker()
 			continue
-		} else if len(workers) == 1 {
+		} else if len(workers) == 1 || len(workers) > config.MaxWorkers {
 			continue
 		}
 
