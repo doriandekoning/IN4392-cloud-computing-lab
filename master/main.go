@@ -322,7 +322,7 @@ func ProcessMetrics(w http.ResponseWriter, r *http.Request) {
 	workerAddress := r.URL.Query()["address"][0]
 
 	for {
-		fmt.Println("AAGH", r.Body)
+		
 		line, err := csvReader.Read()
 		if err == io.EOF {
 			break
