@@ -50,6 +50,8 @@ func main() {
 
 	router := mux.NewRouter()
 	router.Use(middleware.LoggingMiddleWare)
+	authenticationMiddleware := middleware.AuthenticationMiddleware{ApiKey: conf.ApiKey}
+	router.Use(authenticationMiddleware.Middleware)
 	router.HandleFunc("/health", GetHealth)
 	router.HandleFunc("/storeresult", storeResult).Methods("POST")
 	router.HandleFunc("/result/{processingRequestID}", hasResult).Methods("GET")
