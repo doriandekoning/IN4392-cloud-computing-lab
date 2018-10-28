@@ -148,8 +148,8 @@ func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 func ProcessGraphsWhenAvailable() {
 	for {
 		for len(tasks) > 0 {
-			task := tasks[0]
-			tasks = tasks[1:]
+			var task task
+			task, tasks = tasks[0], tasks[1:]
 			ProcessGraph(task.Graph, task.Parameters)
 		}
 		time.Sleep(1 * time.Second)
