@@ -394,9 +394,15 @@ func scaleWorkers() {
 			}
 		}
 		//Check for scaling down
+		const scaleDownThreshold = 2
 		for _, worker := range activeHealthyWorkers {
-			if len(worker.TasksProcessing) == 0 {
+			if len(worker.TasksProcessing) < scaleDownThreshold {
 				worker.Active = false
+			}
+		}
+		for _, worker := range inactiveHealthyWorkers {
+			if len(worker.TasksProcessing) == 0 {
+				unregisterWorker(worker)
 			}
 		}
 
