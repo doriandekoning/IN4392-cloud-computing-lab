@@ -47,7 +47,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	metriclogger.CreateMetricFolder()
 	go metriclogger.MonitorResourceUsage()
 
 	router := mux.NewRouter()
@@ -186,18 +185,20 @@ outerloop:
 func sendMetrics() {
 	for {
 		// TODO Send CSV file to the endpoint.
+		metriclogger.LogWriter.Flush()
+		requestOptions := grequests.RequestOptions{RequestBody: metriclogger.LogBuffer}
+		resp, err := grequests.Post(getMasterURL()+"/metrics", &requestOptions)
 
-		// resp, err := grequests.Post(getMasterURL()+"/metrics", nil)
-		// defer resp.Close()
+		if err != nil {
+			fmt.Println("Error sending metrics to master.")
+		}
 
-		// if err != nil {
-		// 	fmt.Println("Error sending metrics to master.")
-		// }
+		defer resp.Close()
 
-		// // Clear the metrics file so we never send duplicate data.
-		// metriclogger.ClearMetrics()
+		// Clear the metrics file so we never send duplicate data.
+		metriclogger.LogBuffer.Reset()
 
-		// time.Sleep(10 * time.Second)
+		time.Sleep(10 * time.Second)
 	}
 
 }
