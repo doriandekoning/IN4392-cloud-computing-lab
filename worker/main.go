@@ -222,7 +222,7 @@ func notifyMasterOnProcessCompletion(graphId uuid.UUID) {
 		Headers: map[string]string{"Content-Type": "application/json", "X-Auth": conf.ApiKey},
 	}
 
-	_, err := grequests.Post(getMasterURL()+"/worker/done", &requestOptions)
+	_, err := grequests.Get(getMasterURL()+"/worker/done", &requestOptions)
 	if err != nil {
 		fmt.Println("Unable to notify master about finishing processing a graph, error:", err)
 		return

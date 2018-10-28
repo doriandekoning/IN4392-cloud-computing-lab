@@ -77,7 +77,7 @@ func main() {
 	router.HandleFunc("/addworker", AddWorkerRequest).Methods("GET")
 	router.HandleFunc("/processgraph", ProcessGraph).Methods("POST")
 	router.HandleFunc("/worker/register", registerWorker).Methods("POST")
-	router.HandleFunc("/worker/done", workerDoneProcessing).Methods("POST")
+	router.HandleFunc("/worker/done", workerDoneProcessing).Methods("GET")
 	router.HandleFunc("/worker/unregister", unregisterWorkerRequest).Methods("DELETE")
 
 	go scaleWorkers()
