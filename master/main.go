@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"math/rand"
 	"net/http"
 	"strconv"
 	"time"
@@ -317,9 +316,8 @@ func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 		return
 	}
 	for {
-		// Distribute graph among workers by randomly selecting a worker
-		// possible improvement select the worker which has the shortest queue
-		var worker = activeWorkers[rand.Intn(len(activeWorkers))]
+		// Distribute graph among workers
+		worker := getLeastBusyWorker()
 		err := sendGraphToWorker(*graph, worker, parameters)
 		if err == nil {
 			worker.TasksProcessing = append(worker.TasksProcessing, task{graph, parameters})
@@ -329,6 +327,17 @@ func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 		//Try again in 10 sec
 		time.Sleep(10 * time.Second)
 	}
+}
+
+func getLeastBusyWorker() *node {
+	activeWorkers := getActiveWorkers()
+	leastBussyWorker := activeWorkers[0]
+	for _, worker := range workers {
+		if len(worker.TasksProcessing) < len(leastBussyWorker.TasksProcessing) {
+			leastBussyWorker = worker
+		}
+	}
+	return leastBussyWorker
 }
 
 func sendGraphToWorker(graph graphs.Graph, worker *node, parameters map[string][]string) error {
