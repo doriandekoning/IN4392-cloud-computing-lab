@@ -333,7 +333,7 @@ func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 }
 
 func getLeastBusyWorker() *node {
-	activeWorkers := getActiveWorkers()
+	activeWorkers := workers.filter(true, true)
 	leastBussyWorker := activeWorkers[0]
 	for _, worker := range workers {
 		if len(worker.TasksProcessing) < len(leastBussyWorker.TasksProcessing) {
@@ -384,14 +384,9 @@ func scaleWorkers() {
 		const queueSizeThreshold = 2
 		var activeHealthyWorkers = workers.filter(true, true)
 		var inactiveHealthyWorkers = workers.filter(false, true)
-		var minQueueLength = 1000000
-		for _, worker := range activeHealthyWorkers {
-			if minQueueLength > len(worker.TasksProcessing) {
-				minQueueLength = len(worker.TasksProcessing)
-			}
-		}
+		leastBusyWorker := getLeastBusyWorker()
 
-		if minQueueLength >= queueSizeThreshold {
+		if len(leastBusyWorker.TasksProcessing) >= queueSizeThreshold {
 			if len(inactiveHealthyWorkers) > 0 {
 				inactiveHealthyWorkers[0].Active = true
 			} else {
