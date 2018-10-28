@@ -200,6 +200,8 @@ outerloop:
 	}
 
 	writeResultToStorage(&result)
+	notifyMasterOnProcessCompletion(graph.Id)
+
 }
 
 func sendMetrics() {
@@ -219,7 +221,7 @@ func sendMetrics() {
 		metriclogger.LogBuffer.Reset()
 
 		time.Sleep(10 * time.Second)
-	  notifyMasterOnProcessCompletion(graph.Id)
+	}
 }
 
 func notifyMasterOnProcessCompletion(graphId uuid.UUID) {
