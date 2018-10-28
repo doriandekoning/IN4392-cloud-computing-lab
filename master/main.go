@@ -29,6 +29,8 @@ type Config struct {
 
 var config Config
 
+type NodeCollection []*node
+
 var g graphs.Graph
 
 type task struct {
@@ -41,11 +43,12 @@ type node struct {
 	InstanceId            string
 	LastResponseTimestamp int64
 	Healthy               bool
+	Active                bool
 	TasksProcessing       []task
 }
 
-var workers []*node
-var storageNodes []*node
+var workers NodeCollection
+var storageNodes NodeCollection
 
 var Sess *session.Session
 
@@ -106,7 +109,7 @@ func GetHealth(w http.ResponseWriter, r *http.Request) {
 		MaxWorkers:           config.MaxWorkers,
 		MinWorkers:           minWorkers,
 		RequestsSinceScaling: requestsSinceScaling,
-		ActiveWorkers:        len(getActiveWorkers()),
+		ActiveWorkers:        len(workers.filter(true, true)),
 		Workers:              workers,
 	}
 
@@ -215,7 +218,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	g = graph
 
-	if len(getActiveWorkers()) == 0 {
+	if len(workers.filter(true, true)) == 0 {
 		util.InternalServerError(w, "No workers found", nil)
 		return
 	}
@@ -276,7 +279,7 @@ func unregisterWorker(oldWorker *node) {
 
 func registerNode(w http.ResponseWriter, r *http.Request) {
 	var newNode node
-	var nodesOfType *[]*node
+	var nodesOfType *NodeCollection
 	nodeType := mux.Vars(r)["nodetype"]
 	if nodeType == "storage" {
 		nodesOfType = &storageNodes
@@ -310,7 +313,7 @@ func registerNode(w http.ResponseWriter, r *http.Request) {
 }
 
 func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
-	var activeWorkers = getActiveWorkers()
+	var activeWorkers = workers.filter(true, true)
 	if len(activeWorkers) == 0 {
 		fmt.Println("No workers available")
 		return
@@ -377,22 +380,39 @@ func scaleWorkers() {
 	for {
 		time.Sleep(60 * time.Second)
 
-		var activeWorkers = getActiveWorkers()
-		if len(activeWorkers) < minWorkers || (len(activeWorkers) < config.MaxWorkers && (requestsSinceScaling/len(activeWorkers)) > 3) {
-			StartNewWorker()
-		} else if len(activeWorkers) > minWorkers && (requestsSinceScaling/len(activeWorkers)) < 2 {
-			worker := activeWorkers[0]
-			unregisterWorker(worker)
+		//Check scaling up
+		const queueSizeThreshold = 2
+		var activeHealthyWorkers = workers.filter(true, true)
+		var inactiveHealthyWorkers = workers.filter(false, true)
+		var minQueueLength = 1000000
+		for _, worker := range activeHealthyWorkers {
+			if minQueueLength > len(worker.TasksProcessing) {
+				minQueueLength = len(worker.TasksProcessing)
+			}
 		}
-		requestsSinceScaling = 0
+
+		if minQueueLength >= queueSizeThreshold {
+			if len(inactiveHealthyWorkers) > 0 {
+				inactiveHealthyWorkers[0].Active = true
+			} else {
+				StartNewWorker()
+			}
+		}
+		//Check for scaling down
+		for _, worker := range activeHealthyWorkers {
+			if len(worker.TasksProcessing) == 0 {
+				worker.Active = false
+			}
+		}
+
 	}
 }
 
-func getActiveWorkers() []*node {
-	var result []*node
-	for _, worker := range workers {
-		if worker.Healthy {
-			result = append(result, worker)
+func (NodeCollection) filter(active, healthy bool) NodeCollection {
+	var result NodeCollection
+	for _, node := range workers {
+		if node.Active == active && node.Healthy == healthy {
+			result = append(result, node)
 		}
 	}
 	return result
