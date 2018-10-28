@@ -75,7 +75,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Error", err)
 	}
-	metricsFile, err = os.Create("~/metrics/metrics")
+	metricsFile, err = os.Create("/home/ubuntu/metrics/metrics")
 	if err != nil {
 		log.Fatal("Error", err)
 	}
@@ -493,12 +493,12 @@ func postMetric() {
 		fmt.Println("Error closing file", err)
 		return
 	}
-	err = os.Remove("~/metrics/metrics")
+	err = os.Remove("/home/ubuntu/metrics/metrics")
 	if err != nil {
 		fmt.Println("Error removing file", err)
 		return
 	}
-	metricsFile, err = os.Create("~/metrics/metrics")
+	metricsFile, err = os.Create("/home/ubuntu/metrics/metrics")
 	if err != nil {
 		fmt.Println("Error opening new metrics file", err)
 		return
