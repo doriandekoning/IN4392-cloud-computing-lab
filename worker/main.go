@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"time"
 
-	"../metriclogger"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/graphs"
+	"github.com/doriandekoning/IN4392-cloud-computing-lab/metriclogger"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/middleware"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/util"
 	"github.com/gorilla/mux"
@@ -178,15 +178,16 @@ outerloop:
 	csvWriter.Write(values)
 	csvWriter.Flush()
 	//TODO send to storage
-	fmt.Println(buf.String())
 
 }
 
 func sendMetrics() {
 	for {
-		// TODO Send CSV file to the endpoint.
 		metriclogger.LogWriter.Flush()
-		requestOptions := grequests.RequestOptions{RequestBody: metriclogger.LogBuffer}
+		requestOptions := grequests.RequestOptions{
+			RequestBody: metriclogger.LogBuffer,
+			Params:      map[string]string{"address": getOwnURL()},
+		}
 		resp, err := grequests.Post(getMasterURL()+"/metrics", &requestOptions)
 
 		if err != nil {

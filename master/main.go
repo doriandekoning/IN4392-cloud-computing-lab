@@ -26,6 +26,9 @@ import (
 
 var g graphs.Graph
 
+var metricsFile *os.File
+var amountLogFiles int
+
 type worker struct {
 	Address              string
 	InstanceId           string
@@ -67,6 +70,11 @@ func main() {
 	if err != nil {
 		log.Fatal("Error", err)
 	}
+	metricsFile, err = os.Create("metrics/metrics")
+	if err != nil {
+		log.Fatal("Error", err)
+	}
+	defer postMetric()
 
 	router := mux.NewRouter()
 	router.Use(middleware.LoggingMiddleWare)
@@ -77,6 +85,7 @@ func main() {
 	router.HandleFunc("/worker/register", registerWorker).Methods("POST")
 	router.HandleFunc("/worker/unregister", unregisterWorkerRequest).Methods("DELETE")
 	router.HandleFunc("/metrics", ProcessMetrics).Methods("POST")
+	router.HandleFunc("/forcewritemetrics", forceWriteMetrics).Methods("GET")
 
 	go scaleWorkers()
 	go getWorkersHealth()
@@ -308,18 +317,62 @@ func paramsMapToRequestParamsMap(original map[string][]string) map[string]string
 }
 
 func ProcessMetrics(w http.ResponseWriter, r *http.Request) {
-	// TODO: Read CSV from the request and append the metrics.
 
 	csvReader := csv.NewReader(r.Body)
 
+	workerAddress := r.URL.Query()["address"][0]
+
 	for {
+
 		line, err := csvReader.Read()
 		if err == io.EOF {
 			break
 		} else if err != nil {
 			log.Fatal(err)
 		}
+		_, err = metricsFile.Write([]byte(fmt.Sprintf("%s, %s, %s, %s, %s\n", workerAddress, line[0], line[1], line[2], line[3])))
 
-		fmt.Printf("%s, %s, %s, %s\n", line[0], line[1], line[2], line[3])
+		if err != nil {
+			fmt.Println("Error writing to file")
+			return
+		}
 	}
+	fileStat, err := metricsFile.Stat()
+	if err != nil {
+		log.Fatal("Error getting logfile stats", err)
+		return
+	}
+	//If file is larger then 10mb post it
+	if fileStat.Size() > 10*1000000 {
+		postMetric()
+	}
+}
+
+func postMetric() {
+	//TODO get name from config
+	err := PostMetrics(metricsFile, "log"+strconv.Itoa(amountLogFiles))
+	if err != nil {
+		fmt.Println("Error posting metrics", err)
+		return
+	}
+	err = metricsFile.Close()
+	if err != nil {
+		fmt.Println("Error closing file", err)
+		return
+	}
+	err = os.Remove("metrics/metrics")
+	if err != nil {
+		fmt.Println("Error removing file", err)
+		return
+	}
+	metricsFile, err = os.Create("metrics/metrics")
+	if err != nil {
+		fmt.Println("Error opening new metrics file", err)
+		return
+	}
+	amountLogFiles++
+}
+
+func forceWriteMetrics(w http.ResponseWriter, r *http.Request) {
+	postMetric()
 }
