@@ -37,15 +37,16 @@ type task struct {
 	Parameters map[string][]string
 }
 
-type worker struct {
+type node struct {
 	Address               string
 	InstanceId            string
 	LastResponseTimestamp int64
-	Healty                bool
+	Healthy               bool
 	TasksProcessing       []task
 }
 
-var workers []*worker
+var workers []*node
+var storageNodes []*node
 
 var Sess *session.Session
 
@@ -76,12 +77,14 @@ func main() {
 	router.HandleFunc("/killworkers", KillWorkersRequest).Methods("GET")
 	router.HandleFunc("/addworker", AddWorkerRequest).Methods("GET")
 	router.HandleFunc("/processgraph", ProcessGraph).Methods("POST")
-	router.HandleFunc("/worker/register", registerWorker).Methods("POST")
+	router.HandleFunc("/{nodetype}/register", registerNode).Methods("POST")
 	router.HandleFunc("/worker/done", workerDoneProcessing).Methods("GET")
+	router.HandleFunc("/storagenode", listStorageNodes).Methods("GET")
 	router.HandleFunc("/worker/unregister", unregisterWorkerRequest).Methods("DELETE")
+	router.HandleFunc("/result/{processingRequestId}", getResult).Methods("GET")
 
 	go scaleWorkers()
-	go getWorkersHealth()
+	go getNodesHealth()
 	server := &http.Server{
 		Handler:      router,
 		Addr:         ":8000",
@@ -99,7 +102,7 @@ func GetHealth(w http.ResponseWriter, r *http.Request) {
 		MinWorkers           int
 		RequestsSinceScaling int
 		ActiveWorkers        int
-		Workers              []*worker
+		Workers              []*node
 	}{
 		MaxWorkers:           config.MaxWorkers,
 		MinWorkers:           minWorkers,
@@ -150,7 +153,7 @@ func workerDoneProcessing(w http.ResponseWriter, r *http.Request) {
 		util.BadRequest(w, "Error parsing processingRequestId", err)
 		return
 	}
-	var worker = getWorker(actualPayload.InstanceId)
+	var worker = getNode(actualPayload.InstanceId)
 	if worker == nil {
 		util.BadRequest(w, "Error finding worker instanceId", err)
 		return
@@ -228,6 +231,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	//Asynchronously distribute the graph
 	go distributeGraph(&graph, r.URL.Query())
+	w.WriteHeader(http.StatusAccepted)
 	//Write id to response
 	idBytes, _ := graph.Id.MarshalText()
 	w.WriteHeader(http.StatusAccepted)
@@ -235,7 +239,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 }
 
 func registerWorker(w http.ResponseWriter, r *http.Request) {
-	var newWorker worker
+	var newWorker node
 
 	b, _ := ioutil.ReadAll(r.Body)
 	err := json.Unmarshal(b, &newWorker)
@@ -244,13 +248,13 @@ func registerWorker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	newWorker.LastResponseTimestamp = time.Now().Unix()
-	newWorker.Healty = true
+	newWorker.Healthy = true
 	workers = append(workers, &newWorker)
 	util.GeneralResponse(w, true, "Worker: "+newWorker.InstanceId+" successfully registered!")
 }
 
 func unregisterWorkerRequest(w http.ResponseWriter, r *http.Request) {
-	var oldWorker worker
+	var oldWorker node
 	bodyBytes, _ := ioutil.ReadAll(r.Body)
 	err := json.Unmarshal(bodyBytes, &oldWorker)
 	if err != nil {
@@ -261,7 +265,7 @@ func unregisterWorkerRequest(w http.ResponseWriter, r *http.Request) {
 	util.GeneralResponse(w, true, "Worker: "+oldWorker.InstanceId+" successfully unregistered!")
 }
 
-func unregisterWorker(oldWorker *worker) {
+func unregisterWorker(oldWorker *node) {
 	for index, worker := range workers {
 		if worker.Address == oldWorker.Address {
 			//Move last worker to location of worker to remove
@@ -272,7 +276,7 @@ func unregisterWorker(oldWorker *worker) {
 		}
 	}
 	if oldWorker.InstanceId != "" {
-		TerminateWorkers([]*worker{oldWorker})
+		TerminateWorkers([]*node{oldWorker})
 	}
 	//Redistribute graphs this worker was still processing
 	for _, task := range oldWorker.TasksProcessing {
@@ -280,8 +284,47 @@ func unregisterWorker(oldWorker *worker) {
 	}
 }
 
+func registerNode(w http.ResponseWriter, r *http.Request) {
+	var newNode node
+	var nodesOfType *[]*node
+	nodeType := mux.Vars(r)["nodetype"]
+	if nodeType == "storage" {
+		nodesOfType = &storageNodes
+	} else if nodeType == "worker" {
+		nodesOfType = &workers
+	} else {
+		util.BadRequest(w, "Nodetype "+nodeType+" is not known", nil)
+		return
+	}
+	b, _ := ioutil.ReadAll(r.Body)
+	err := json.Unmarshal(b, &newNode)
+	if err != nil {
+		util.BadRequest(w, "Error unmarshalling storagenode registration body", err)
+		return
+	}
+	newNode.Healthy = true
+	var replaced bool
+	for nodeIndex, node := range *nodesOfType {
+		if node.Address == node.Address {
+			(*nodesOfType)[nodeIndex] = &newNode
+			replaced = true
+			break
+		}
+	}
+
+	if !replaced {
+		*nodesOfType = append(*nodesOfType, &newNode)
+	}
+	fmt.Println(nodeType + " node sucessfully registered")
+
+}
+
 func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 	var activeWorkers = getActiveWorkers()
+	if len(activeWorkers) == 0 {
+		fmt.Println("No workers available")
+		return
+	}
 	for {
 		// Distribute graph among workers by randomly selecting a worker
 		// possible improvement select the worker which has the shortest queue
@@ -297,7 +340,7 @@ func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 	}
 }
 
-func sendGraphToWorker(graph graphs.Graph, worker *worker, parameters map[string][]string) error {
+func sendGraphToWorker(graph graphs.Graph, worker *node, parameters map[string][]string) error {
 	options := grequests.RequestOptions{
 		JSON:    graph,
 		Headers: map[string]string{"Content-Type": "application/json", "X-Auth": config.ApiKey},
@@ -311,21 +354,19 @@ func sendGraphToWorker(graph graphs.Graph, worker *worker, parameters map[string
 	return nil
 }
 
-func getWorkersHealth() {
+func getNodesHealth() {
 	requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": config.ApiKey}}
 	for {
-		for _, worker := range workers {
-			resp, err := grequests.Get(worker.Address+"/health", &requestOptions)
-
+		for _, node := range append(workers, storageNodes...) {
+			_, err := grequests.Get(node.Address+"/health", &requestOptions)
 			if err != nil {
-				worker.Healty = false
+				node.Healthy = false
 			} else {
-				defer resp.Close()
-				worker.Healty = true
-				worker.LastResponseTimestamp = time.Now().Unix()
+				node.Healthy = true
+				node.LastResponseTimestamp = time.Now().Unix()
 			}
-			if time.Now().Unix()-worker.LastResponseTimestamp > 60 {
-				unregisterWorker(worker)
+			if time.Now().Unix()-node.LastResponseTimestamp > 60 {
+				unregisterWorker(node)
 			}
 		}
 		time.Sleep(30 * time.Second)
@@ -347,17 +388,17 @@ func scaleWorkers() {
 	}
 }
 
-func getActiveWorkers() []*worker {
-	var result []*worker
+func getActiveWorkers() []*node {
+	var result []*node
 	for _, worker := range workers {
-		if worker.Healty {
+		if worker.Healthy {
 			result = append(result, worker)
 		}
 	}
 	return result
 }
 
-func getWorker(instanceId string) *worker {
+func getNode(instanceId string) *node {
 	for _, worker := range workers {
 		if worker.InstanceId == instanceId {
 			return worker
@@ -372,4 +413,55 @@ func paramsMapToRequestParamsMap(original map[string][]string) map[string]string
 		retval[k] = v[0]
 	}
 	return retval
+}
+
+func listStorageNodes(w http.ResponseWriter, r *http.Request) {
+	if storageNodes == nil {
+		w.Write([]byte("{}"))
+	} else {
+		retVal, err := json.Marshal(storageNodes)
+		if err != nil {
+			util.InternalServerError(w, "Cannot marshall nodes", err)
+			return
+		}
+		w.Write(retVal)
+	}
+}
+
+type hasRequestResult struct {
+	statusCode  int
+	nodeAddress string
+}
+
+func getResult(w http.ResponseWriter, r *http.Request) {
+	requestID, err := uuid.FromString(mux.Vars(r)["processingRequestId"])
+	if err != nil {
+		util.BadRequest(w, "Error parsing processingRequestId", err)
+		return
+	}
+
+	respChannel := make(chan hasRequestResult)
+	for _, node := range storageNodes {
+		go storageNodeHasResult(respChannel, node.Address, requestID)
+	}
+	amountResults := 0
+	var resultsNeeded = (len(storageNodes) + 1) / 2
+	for i := 0; i < len(storageNodes); i++ {
+		result := <-respChannel
+		if result.statusCode != -1 && result.statusCode < 300 {
+			amountResults++
+			if amountResults >= resultsNeeded {
+				w.Write([]byte(result.nodeAddress + "/results/" + requestID.String()))
+				return
+			}
+		}
+	}
+}
+
+func storageNodeHasResult(respChannel chan hasRequestResult, nodeAddress string, requestID uuid.UUID) {
+	resp, err := grequests.Get(nodeAddress+"/result/"+requestID.String(), nil)
+	if err != nil {
+		fmt.Println("Error getting info if node has result ", err)
+	}
+	respChannel <- hasRequestResult{resp.StatusCode, nodeAddress}
 }
