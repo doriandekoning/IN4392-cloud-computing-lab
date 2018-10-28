@@ -24,17 +24,11 @@ export MAXWORKERS=3
 
 # Deploy
 ## Worker
-`cd  ~/go/src/github.com/doriandekoning/IN4392-cloud-computing-lab`
-`git pull`
-`go get ./worker`
-`go build -o bin/worker worker/main.go`
+`go get github.com/doriandekoning/IN4392-cloud-computing-lab/worker`
 Create a new image in AWS console and update the worker launch template with this new image.
 Set the default version of the template to the new version
 status can be checked with `sudo systemctl status worker`
 ## Master
-`cd  ~/go/src/github.com/doriandekoning/IN4392-cloud-computing-lab`
-`git pull`
-`go get ./master`
-`go build -o bin/master master/*.go`
+`go get github.com/doriandekoning/IN4392-cloud-computing-lab/master`
 `sudo systemctl restart master`
 status can be checked with `sudo systemctl status master`

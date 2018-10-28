@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -17,6 +15,7 @@ import (
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/util"
 	"github.com/gorilla/mux"
 	"github.com/levigross/grequests"
+	uuid "github.com/satori/go.uuid"
 	"github.com/vrischmann/envconfig"
 )
 
@@ -31,11 +30,18 @@ type Config struct {
 		Address    string
 		Instanceid string `envconfig:"optional"`
 	}
+	ApiKey string
 }
 
-type worker struct {
+type node struct {
 	Address string
-	Healty  bool
+	Healthy bool
+}
+
+type Result struct {
+	ID        uuid.UUID
+	Algorithm string
+	Values    []float64
 }
 
 var conf Config
@@ -51,6 +57,8 @@ func main() {
 
 	router := mux.NewRouter()
 	router.Use(middleware.LoggingMiddleWare)
+	authenticationMiddleware := middleware.AuthenticationMiddleware{ApiKey: conf.ApiKey}
+	router.Use(authenticationMiddleware.Middleware)
 	router.HandleFunc("/health", GetHealth)
 	router.HandleFunc("/graph", ReceiveGraph).Methods("POST")
 	router.HandleFunc("/unregister", UnRegisterRequest).Methods("POST")
@@ -58,7 +66,15 @@ func main() {
 	register()
 	go checkMasterHealth()
 	go sendMetrics()
-	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(conf.Own.Port), router))
+
+	server := &http.Server{
+		Handler:      router,
+		Addr:         ":" + strconv.Itoa(conf.Own.Port),
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+
+	log.Fatal(server.ListenAndServe())
 	defer unregister()
 }
 
@@ -75,15 +91,15 @@ func register() {
 	for {
 		options := grequests.RequestOptions{
 			JSON:    map[string]string{"address": getOwnURL(), "instanceId": conf.Own.Instanceid},
-			Headers: map[string]string{"Content-Type": "application/json"},
+			Headers: map[string]string{"Content-Type": "application/json", "X-Auth": conf.ApiKey},
 		}
 		resp, err := grequests.Post(getMasterURL()+"/worker/register", &options)
-		defer resp.Close()
-		if err == nil {
+		if err == nil && resp.StatusCode < 300 {
 			fmt.Println("Successfully registered")
+			defer resp.Close()
 			break
 		}
-		fmt.Println("Unable to register", err)
+		fmt.Println("Unable to register, statuscode: ", resp.StatusCode)
 		//Try again in 10 sec
 		time.Sleep(10 * time.Second)
 	}
@@ -92,26 +108,16 @@ func register() {
 func unregister() {
 	options := grequests.RequestOptions{
 		JSON:    map[string]string{"address": getOwnURL(), "instanceId": conf.Own.Instanceid},
-		Headers: map[string]string{"Content-Type": "application/json"},
+		Headers: map[string]string{"Content-Type": "application/json", "X-Auth": conf.ApiKey},
 	}
 	resp, err := grequests.Delete(getMasterURL()+"/worker/unregister", &options)
-	defer resp.Close()
-	if err != nil {
-		fmt.Println("Unable to register, error:", err)
+	if err != nil && resp.StatusCode >= 300 {
+		fmt.Println("Unable to register, statuscode:", resp.StatusCode)
 		return
 	}
+	defer resp.Close()
 	fmt.Println("Sucessfully unregistered")
 
-}
-
-func getSubProblem(w http.ResponseWriter, r *http.Request) {
-	bodyBytes, _ := ioutil.ReadAll(r.Body)
-	type payload struct {
-		workers []worker
-		nodes   []graphs.Node
-	}
-	actualPayload := payload{}
-	json.Unmarshal(bodyBytes, &actualPayload)
 }
 
 func getMasterURL() string {
@@ -169,16 +175,13 @@ outerloop:
 		}
 		break
 	}
-	buf := new(bytes.Buffer)
-	csvWriter := csv.NewWriter(buf)
-	values := []string{}
-	for _, node := range graph.Nodes {
-		values = append(values, strconv.FormatFloat(node.Value, 'f', 6, 64))
+	result := Result{ID: graph.Id, Algorithm: algorithm, Values: make([]float64, len(graph.Nodes))}
+	for nodeIndex, node := range graph.Nodes {
+		// values = append(values, strconv.FormatFloat(node.Value, 'f', 6, 64))
+		result.Values[nodeIndex] = node.Value
 	}
-	csvWriter.Write(values)
-	csvWriter.Flush()
-	//TODO send to storage
 
+	writeResultToStorage(&result)
 }
 
 func sendMetrics() {
@@ -201,17 +204,66 @@ func sendMetrics() {
 
 		time.Sleep(10 * time.Second)
 	}
-
 }
 
 func checkMasterHealth() {
+	requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": conf.ApiKey}}
 	for {
-		resp, err := grequests.Get(getMasterURL()+"/health", nil)
-		defer resp.Close()
+		resp, err := grequests.Get(getMasterURL()+"/health", &requestOptions)
+
 		if err != nil {
 			fmt.Println("Master seems to be offline")
 			register()
+		} else {
+			defer resp.Close()
 		}
 		time.Sleep(10 * time.Second)
+	}
+}
+
+func writeResultToStorage(result *Result) {
+	//TODO maybe return this from health
+	requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": conf.ApiKey}}
+	resp, err := grequests.Get(getMasterURL()+"/storagenode", &requestOptions)
+	if err != nil || resp.StatusCode >= 300 {
+		fmt.Println("Error when trying to get storage node adresses from master: ", resp.StatusCode, err)
+		return
+	}
+	storageNodes := make([]node, 0)
+	err = json.Unmarshal(resp.Bytes(), &storageNodes)
+	if err != nil {
+		fmt.Println("Error unmarshaling storage nodes", resp.String(), err)
+		return
+	}
+	options := grequests.RequestOptions{
+		JSON:    result,
+		Headers: map[string]string{"Content-Type": "application/json", "X-Auth": conf.ApiKey},
+	}
+	respChannel := make(chan int)
+	for i := 0; i < len(storageNodes); i++ {
+		go writeResultToSpecificStorageNode(storageNodes[i], options, respChannel)
+	}
+	var successfullWrites int
+	var writesNeeded = (len(storageNodes) + 1) / 2
+	for i := 0; i < len(storageNodes); i++ {
+		statusCode := <-respChannel
+		if statusCode > 0 && statusCode < 300 {
+			successfullWrites++
+			if successfullWrites >= writesNeeded {
+				fmt.Println("Successfull write to enough nodes for: " + result.ID.String())
+				return
+			}
+		}
+	}
+	fmt.Println("Failed to write result:" + result.ID.String())
+}
+
+func writeResultToSpecificStorageNode(storageNode node, options grequests.RequestOptions, respChannel chan int) {
+
+	resp, err := grequests.Post(storageNode.Address+"/storeresult", &options)
+	if err != nil {
+		respChannel <- -1
+	} else {
+		respChannel <- resp.StatusCode
 	}
 }

@@ -22,34 +22,30 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/levigross/grequests"
 	uuid "github.com/satori/go.uuid"
+	"github.com/vrischmann/envconfig"
 )
+
+var config Config
 
 var g graphs.Graph
 
-var metricsFile *os.File
-var amountLogFiles int
-
-type worker struct {
-	Address              string
-	InstanceId           string
-	SecondsNotResponding int
-	Healty               bool
-	Active               bool
+type node struct {
+	Address               string
+	InstanceId            string
+	LastResponseTimestamp int64
+	Healthy               bool
+	Active                bool
 }
 
-type HealthResponse struct {
-	MaxWorkers           int
-	MinWorkers           int
-	RequestsSinceScaling int
-	ActiveWorkers        int
-	Workers              []*worker
+type Config struct {
+	ApiKey     string
+	MaxWorkers int
 }
 
-var workers []*worker
+var workers []*node
+var storageNodes []*node
 
 var Sess *session.Session
-
-var maxWorkers int
 
 const minWorkers = 1
 
@@ -57,11 +53,12 @@ var requestsSinceScaling = 0
 
 func main() {
 
-	var err error
+	err := envconfig.Init(&config)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	go metriclogger.MonitorResourceUsage()
-
-	maxWorkers, err = strconv.Atoi(os.Getenv("MAXWORKERS"))
 
 	Sess, err = session.NewSession(&aws.Config{
 		Region: aws.String("us-east-1"),
@@ -78,24 +75,46 @@ func main() {
 
 	router := mux.NewRouter()
 	router.Use(middleware.LoggingMiddleWare)
+	authenticationMiddleware := middleware.AuthenticationMiddleware{ApiKey: config.ApiKey}
+	router.Use(authenticationMiddleware.Middleware)
 	router.HandleFunc("/health", GetHealth).Methods("GET")
 	router.HandleFunc("/killworkers", KillWorkersRequest).Methods("GET")
 	router.HandleFunc("/addworker", AddWorkerRequest).Methods("GET")
 	router.HandleFunc("/processgraph", ProcessGraph).Methods("POST")
-	router.HandleFunc("/worker/register", registerWorker).Methods("POST")
+	router.HandleFunc("/{nodetype}/register", registerNode).Methods("POST")
+	router.HandleFunc("/storagenode", listStorageNodes).Methods("GET")
 	router.HandleFunc("/worker/unregister", unregisterWorkerRequest).Methods("DELETE")
 	router.HandleFunc("/metrics", ProcessMetrics).Methods("POST")
 	router.HandleFunc("/forcewritemetrics", forceWriteMetrics).Methods("GET")
+	router.HandleFunc("/result/{processingRequestId}", getResult).Methods("GET")
 
 	go scaleWorkers()
-	go getWorkersHealth()
+	go getNodesHealth()
+	server := &http.Server{
+		Handler:      router,
+		Addr:         ":8000",
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
 
-	log.Fatal(http.ListenAndServe(":8000", router))
-
+	log.Fatal(server.ListenAndServe())
 }
 
 func GetHealth(w http.ResponseWriter, r *http.Request) {
-	var response = HealthResponse{MaxWorkers: maxWorkers, MinWorkers: minWorkers, RequestsSinceScaling: requestsSinceScaling, ActiveWorkers: len(getActiveWorkers()), Workers: workers}
+	var response = struct {
+		MaxWorkers           int
+		MinWorkers           int
+		RequestsSinceScaling int
+		ActiveWorkers        int
+		Workers              []*node
+	}{
+		MaxWorkers:           config.MaxWorkers,
+		MinWorkers:           minWorkers,
+		RequestsSinceScaling: requestsSinceScaling,
+		ActiveWorkers:        len(getActiveWorkers()),
+		Workers:              workers,
+	}
+
 	js, err := json.Marshal(response)
 	if err != nil {
 		util.InternalServerError(w, "Health could not be retrieved", err)
@@ -184,6 +203,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	//Asynchronously distribute the graph
 	go distributeGraph(&graph, r.URL.Query())
+	w.WriteHeader(http.StatusAccepted)
 	//Write id to response
 	idBytes, _ := graph.Id.MarshalText()
 	w.WriteHeader(http.StatusAccepted)
@@ -191,7 +211,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 }
 
 func registerWorker(w http.ResponseWriter, r *http.Request) {
-	var newWorker worker
+	var newWorker node
 
 	b, _ := ioutil.ReadAll(r.Body)
 	err := json.Unmarshal(b, &newWorker)
@@ -200,12 +220,13 @@ func registerWorker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	newWorker.Active = true
+	newWorker.LastResponseTimestamp = time.Now().Unix()
 	workers = append(workers, &newWorker)
 	util.GeneralResponse(w, true, "Worker: "+newWorker.InstanceId+" successfully registered!")
 }
 
 func unregisterWorkerRequest(w http.ResponseWriter, r *http.Request) {
-	var oldWorker worker
+	var oldWorker node
 	bodyBytes, _ := ioutil.ReadAll(r.Body)
 	err := json.Unmarshal(bodyBytes, &oldWorker)
 	if err != nil {
@@ -216,7 +237,7 @@ func unregisterWorkerRequest(w http.ResponseWriter, r *http.Request) {
 	util.GeneralResponse(w, true, "Worker: "+oldWorker.InstanceId+" successfully unregistered!")
 }
 
-func unregisterWorker(oldWorker *worker) {
+func unregisterWorker(oldWorker *node) {
 	for index, worker := range workers {
 		if worker.Address == oldWorker.Address {
 			//Move last worker to location of worker to remove
@@ -227,12 +248,51 @@ func unregisterWorker(oldWorker *worker) {
 		}
 	}
 	if oldWorker.InstanceId != "" {
-		TerminateWorkers([]*worker{oldWorker})
+		TerminateWorkers([]*node{oldWorker})
 	}
+}
+
+func registerNode(w http.ResponseWriter, r *http.Request) {
+	var newNode node
+	var nodesOfType *[]*node
+	nodeType := mux.Vars(r)["nodetype"]
+	if nodeType == "storage" {
+		nodesOfType = &storageNodes
+	} else if nodeType == "worker" {
+		nodesOfType = &workers
+	} else {
+		util.BadRequest(w, "Nodetype "+nodeType+" is not known", nil)
+		return
+	}
+	b, _ := ioutil.ReadAll(r.Body)
+	err := json.Unmarshal(b, &newNode)
+	if err != nil {
+		util.BadRequest(w, "Error unmarshalling storagenode registration body", err)
+		return
+	}
+	newNode.Active = true
+	newNode.Healthy = true
+	var replaced bool
+	for nodeIndex, node := range *nodesOfType {
+		if node.Address == node.Address {
+			(*nodesOfType)[nodeIndex] = &newNode
+			replaced = true
+			break
+		}
+	}
+
+	if !replaced {
+		*nodesOfType = append(*nodesOfType, &newNode)
+	}
+	fmt.Println(nodeType + " node sucessfully registered")
 }
 
 func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 	var activeWorkers = getActiveWorkers()
+	if len(activeWorkers) == 0 {
+		fmt.Println("No workers available")
+		return
+	}
 	// Distribute graph among workers by randomly selecting a worker
 	// possible improvement select the worker which has the shortest queue
 	var worker = activeWorkers[rand.Intn(len(activeWorkers))]
@@ -242,66 +302,64 @@ func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 	}
 }
 
-func sendGraphToWorker(graph graphs.Graph, worker *worker, parameters map[string][]string) error {
+func sendGraphToWorker(graph graphs.Graph, worker *node, parameters map[string][]string) error {
 	options := grequests.RequestOptions{
 		JSON:    graph,
-		Headers: map[string]string{"Content-Type": "application/json"},
+		Headers: map[string]string{"Content-Type": "application/json", "X-Auth": config.ApiKey},
 		Params:  paramsMapToRequestParamsMap(parameters),
 	}
 	resp, err := grequests.Post(worker.Address+"/graph", &options)
-	defer resp.Close()
 	if err != nil {
 		return err
 	}
-
+	defer resp.Close()
 	return nil
 }
 
-func getWorkersHealth() {
-	const healthCheckInterval = 30 //seconds
+func getNodesHealth() {
+	requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": config.ApiKey}}
 	for {
-		for _, worker := range workers {
-			resp, err := grequests.Get(worker.Address+"/health", nil)
-			defer resp.Close()
+		for _, node := range append(workers, storageNodes...) {
+			_, err := grequests.Get(node.Address+"/health", &requestOptions)
 			if err != nil {
-				worker.Healty = false
-				worker.SecondsNotResponding = worker.SecondsNotResponding + healthCheckInterval
+				node.Healthy = false
 			} else {
-				worker.Healty = true
-				worker.SecondsNotResponding = 0
+				node.Healthy = true
+				node.LastResponseTimestamp = time.Now().Unix()
 			}
-			if worker.SecondsNotResponding > 60 {
-				unregisterWorker(worker)
+			if time.Now().Unix()-node.LastResponseTimestamp > 60 {
+				unregisterWorker(node)
 			}
 		}
-		time.Sleep(healthCheckInterval * time.Second)
+		time.Sleep(30 * time.Second)
 	}
 }
 
 func scaleWorkers() {
+	requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": config.ApiKey}}
 	for {
 		var activeWorkers = getActiveWorkers()
-		if len(activeWorkers) < minWorkers || (len(activeWorkers) < maxWorkers && (requestsSinceScaling/len(activeWorkers)) > 3) {
+		if len(activeWorkers) < minWorkers || (len(activeWorkers) < config.MaxWorkers && (requestsSinceScaling/len(activeWorkers)) > 3) {
 			StartNewWorker()
 		} else if len(activeWorkers) > minWorkers && (requestsSinceScaling/len(activeWorkers)) < 2 {
 			worker := activeWorkers[0]
 			// Set active to false to stop using this worker
 			worker.Active = false
-			resp, err := grequests.Post(worker.Address+"/unregister", nil)
-			defer resp.Close()
+			resp, err := grequests.Post(worker.Address+"/unregister", &requestOptions)
 			if err != nil {
 				return
 			}
+			defer resp.Close()
 		}
 		requestsSinceScaling = 0
 		time.Sleep(60 * time.Second)
 	}
 }
 
-func getActiveWorkers() []*worker {
-	var result []*worker
+func getActiveWorkers() []*node {
+	var result []*node
 	for _, worker := range workers {
-		if worker.Active && worker.Healty {
+		if worker.Active && worker.Healthy {
 			result = append(result, worker)
 		}
 	}
@@ -375,4 +433,55 @@ func postMetric() {
 
 func forceWriteMetrics(w http.ResponseWriter, r *http.Request) {
 	postMetric()
+}
+
+func listStorageNodes(w http.ResponseWriter, r *http.Request) {
+	if storageNodes == nil {
+		w.Write([]byte("{}"))
+	} else {
+		retVal, err := json.Marshal(storageNodes)
+		if err != nil {
+			util.InternalServerError(w, "Cannot marshall nodes", err)
+			return
+		}
+		w.Write(retVal)
+	}
+}
+
+type hasRequestResult struct {
+	statusCode  int
+	nodeAddress string
+}
+
+func getResult(w http.ResponseWriter, r *http.Request) {
+	requestID, err := uuid.FromString(mux.Vars(r)["processingRequestId"])
+	if err != nil {
+		util.BadRequest(w, "Error parsing processingRequestId", err)
+		return
+	}
+
+	respChannel := make(chan hasRequestResult)
+	for _, node := range storageNodes {
+		go storageNodeHasResult(respChannel, node.Address, requestID)
+	}
+	amountResults := 0
+	var resultsNeeded = (len(storageNodes) + 1) / 2
+	for i := 0; i < len(storageNodes); i++ {
+		result := <-respChannel
+		if result.statusCode != -1 && result.statusCode < 300 {
+			amountResults++
+			if amountResults >= resultsNeeded {
+				w.Write([]byte(result.nodeAddress + "/results/" + requestID.String()))
+				return
+			}
+		}
+	}
+}
+
+func storageNodeHasResult(respChannel chan hasRequestResult, nodeAddress string, requestID uuid.UUID) {
+	resp, err := grequests.Get(nodeAddress+"/result/"+requestID.String(), nil)
+	if err != nil {
+		fmt.Println("Error getting info if node has result ", err)
+	}
+	respChannel <- hasRequestResult{resp.StatusCode, nodeAddress}
 }

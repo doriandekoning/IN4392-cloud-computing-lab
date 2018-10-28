@@ -33,7 +33,7 @@ func StartNewWorker() ([]*ec2.Instance, error) {
 	return instances, nil
 }
 
-func StartWorkers(workers []*worker) error {
+func StartWorkers(workers []*node) error {
 	svc := ec2.New(Sess)
 	_, err := svc.StartInstances(&ec2.StartInstancesInput{
 		InstanceIds: getInstanceIds(workers),
@@ -46,7 +46,7 @@ func StartWorkers(workers []*worker) error {
 	return nil
 }
 
-func StopWorkers(workers []*worker) error {
+func StopWorkers(workers []*node) error {
 	svc := ec2.New(Sess)
 	_, err := svc.StopInstances(&ec2.StopInstancesInput{
 		InstanceIds: getInstanceIds(workers),
@@ -59,7 +59,7 @@ func StopWorkers(workers []*worker) error {
 	return nil
 }
 
-func TerminateWorkers(workers []*worker) error {
+func TerminateWorkers(workers []*node) error {
 	var instanceIds = getInstanceIds(workers)
 	if len(instanceIds) < 1 {
 		return nil
@@ -76,7 +76,7 @@ func TerminateWorkers(workers []*worker) error {
 	return nil
 }
 
-func getInstanceIds([]*worker) []*string {
+func getInstanceIds(workers []*node) []*string {
 	var instanceIds []*string
 	for _, worker := range workers {
 		if worker.InstanceId != "" {
