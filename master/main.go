@@ -329,13 +329,13 @@ func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 
 func getLeastBusyWorker() *node {
 	activeWorkers := workers.filter(true, true)
-	leastBussyWorker := activeWorkers[0]
+	leastBusyWorker := activeWorkers[0]
 	for _, worker := range workers {
-		if len(worker.TasksProcessing) < len(leastBussyWorker.TasksProcessing) {
-			leastBussyWorker = worker
+		if len(worker.TasksProcessing) < len(leastBusyWorker.TasksProcessing) {
+			leastBusyWorker = worker
 		}
 	}
-	return leastBussyWorker
+	return leastBusyWorker
 }
 
 func sendGraphToWorker(graph graphs.Graph, worker *node, parameters map[string][]string) error {
