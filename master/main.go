@@ -137,23 +137,14 @@ func AddWorkerRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func workerDoneProcessing(w http.ResponseWriter, r *http.Request) {
-	b, _ := ioutil.ReadAll(r.Body)
-	type payload struct {
-		RequestId  string
-		InstanceId string
-	}
-	var actualPayload payload
-	err := json.Unmarshal(b, &actualPayload)
-	if err != nil {
-		util.BadRequest(w, "Error unmarshaling body", err)
-		return
-	}
-	processingRequestId, err := uuid.FromString(actualPayload.RequestId)
+	processingRequestId, err := uuid.FromString(r.URL.Query().Get("requestID"))
 	if err != nil {
 		util.BadRequest(w, "Error parsing processingRequestId", err)
 		return
 	}
-	var worker = getNode(actualPayload.InstanceId)
+
+	instanceId := r.URL.Query().Get("instanceID")
+	var worker = getNode(instanceId)
 	if worker == nil {
 		util.BadRequest(w, "Error finding worker instanceId", err)
 		return
@@ -231,7 +222,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	//Asynchronously distribute the graph
 	go distributeGraph(&graph, r.URL.Query())
-	w.WriteHeader(http.StatusAccepted)
+
 	//Write id to response
 	idBytes, _ := graph.Id.MarshalText()
 	w.WriteHeader(http.StatusAccepted)
