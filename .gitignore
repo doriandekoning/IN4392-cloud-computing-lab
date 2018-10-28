@@ -1,2 +1,6 @@
 bin/*
+metrics/*
+experiments/config.txt
+
+.ipynb_checkpoints
 out

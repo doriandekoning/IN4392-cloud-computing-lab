@@ -6,6 +6,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/s3"
 )
 
 func StartNewWorker() ([]*ec2.Instance, error) {
@@ -83,4 +84,17 @@ func getInstanceIds(workers []*node) []*string {
 		}
 	}
 	return instanceIds
+}
+
+func PostMetrics(log *os.File, key string) error {
+	scv := s3.New(Sess)
+	_, err := scv.PutObject(&s3.PutObjectInput{
+		Bucket: aws.String("in4392metrics"),
+		Key:    aws.String(key),
+		Body:   log,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
 }

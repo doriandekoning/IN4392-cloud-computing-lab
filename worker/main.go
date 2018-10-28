@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/graphs"
+	"github.com/doriandekoning/IN4392-cloud-computing-lab/metriclogger"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/middleware"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/util"
 	"github.com/gorilla/mux"
@@ -57,6 +58,8 @@ func main() {
 		log.Fatal(err)
 	}
 
+	go metriclogger.MonitorResourceUsage()
+
 	router := mux.NewRouter()
 	router.Use(middleware.LoggingMiddleWare)
 	authenticationMiddleware := middleware.AuthenticationMiddleware{ApiKey: conf.ApiKey}
@@ -66,6 +69,8 @@ func main() {
 
 	register()
 	go checkMasterHealth()
+	go sendMetrics()
+
 	taskChannel = make(chan task)
 	go ProcessGraphsWhenAvailable()
 	server := &http.Server{
@@ -74,6 +79,7 @@ func main() {
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
+
 	log.Fatal(server.ListenAndServe())
 	defer unregister()
 }
@@ -192,9 +198,28 @@ outerloop:
 		// values = append(values, strconv.FormatFloat(node.Value, 'f', 6, 64))
 		result.Values[nodeIndex] = node.Value
 	}
-	writeResultToStorage(&result)
 
-	notifyMasterOnProcessCompletion(graph.Id)
+	writeResultToStorage(&result)
+}
+
+func sendMetrics() {
+	for {
+		metriclogger.LogWriter.Flush()
+		requestOptions := grequests.RequestOptions{
+			RequestBody: metriclogger.LogBuffer,
+			Params:      map[string]string{"address": getOwnURL()},
+		}
+		_, err := grequests.Post(getMasterURL()+"/metrics", &requestOptions)
+
+		if err != nil {
+			fmt.Println("Error sending metrics to master.")
+		}
+
+		// Clear the metrics file so we never send duplicate data.
+		metriclogger.LogBuffer.Reset()
+
+		time.Sleep(10 * time.Second)
+	  notifyMasterOnProcessCompletion(graph.Id)
 }
 
 func notifyMasterOnProcessCompletion(graphId uuid.UUID) {

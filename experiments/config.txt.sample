@@ -1,0 +1,9 @@
+[AWS]
+access_key = 
+secret_key = 
+session_token = 
+
+[Master]
+master_url = 
+api_key = 
+

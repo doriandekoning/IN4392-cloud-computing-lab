@@ -8,12 +8,14 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/graphs"
+	"github.com/doriandekoning/IN4392-cloud-computing-lab/metriclogger"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/middleware"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/util"
 	"github.com/gorilla/mux"
@@ -22,12 +24,10 @@ import (
 	"github.com/vrischmann/envconfig"
 )
 
-type Config struct {
-	ApiKey     string
-	MaxWorkers int
-}
-
 var config Config
+
+var metricsFile *os.File
+var amountLogFiles int
 
 type NodeCollection []*node
 
@@ -47,6 +47,11 @@ type node struct {
 	TasksProcessing       []task
 }
 
+type Config struct {
+	ApiKey     string
+	MaxWorkers int
+}
+
 var workers NodeCollection
 var storageNodes NodeCollection
 
@@ -61,6 +66,8 @@ func main() {
 		log.Fatal(err)
 	}
 
+	go metriclogger.MonitorResourceUsage()
+
 	Sess, err = session.NewSession(&aws.Config{
 		Region: aws.String("us-east-1"),
 	})
@@ -68,6 +75,11 @@ func main() {
 	if err != nil {
 		log.Fatal("Error", err)
 	}
+	metricsFile, err = os.Create("metrics/metrics")
+	if err != nil {
+		log.Fatal("Error", err)
+	}
+	defer postMetric()
 
 	router := mux.NewRouter()
 	router.Use(middleware.LoggingMiddleWare)
@@ -81,6 +93,8 @@ func main() {
 	router.HandleFunc("/worker/done", workerDoneProcessing).Methods("GET")
 	router.HandleFunc("/storagenode", listStorageNodes).Methods("GET")
 	router.HandleFunc("/worker/unregister", unregisterWorkerRequest).Methods("DELETE")
+	router.HandleFunc("/metrics", ProcessMetrics).Methods("POST")
+	router.HandleFunc("/forcewritemetrics", forceWriteMetrics).Methods("GET")
 	router.HandleFunc("/result/{processingRequestId}", getResult).Methods("GET")
 
 	go scaleWorkers()
@@ -93,7 +107,6 @@ func main() {
 	}
 
 	log.Fatal(server.ListenAndServe())
-
 }
 
 func GetHealth(w http.ResponseWriter, r *http.Request) {
@@ -426,6 +439,67 @@ func paramsMapToRequestParamsMap(original map[string][]string) map[string]string
 		retval[k] = v[0]
 	}
 	return retval
+}
+
+func ProcessMetrics(w http.ResponseWriter, r *http.Request) {
+
+	csvReader := csv.NewReader(r.Body)
+
+	workerAddress := r.URL.Query()["address"][0]
+
+	for {
+
+		line, err := csvReader.Read()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			log.Fatal(err)
+		}
+		_, err = metricsFile.Write([]byte(fmt.Sprintf("%s, %s, %s, %s, %s\n", workerAddress, line[0], line[1], line[2], line[3])))
+
+		if err != nil {
+			fmt.Println("Error writing to file")
+			return
+		}
+	}
+	fileStat, err := metricsFile.Stat()
+	if err != nil {
+		log.Fatal("Error getting logfile stats", err)
+		return
+	}
+	//If file is larger then 10mb post it
+	if fileStat.Size() > 10*1000000 {
+		postMetric()
+	}
+}
+
+func postMetric() {
+	//TODO get name from config
+	err := PostMetrics(metricsFile, "log"+strconv.Itoa(amountLogFiles))
+	if err != nil {
+		fmt.Println("Error posting metrics", err)
+		return
+	}
+	err = metricsFile.Close()
+	if err != nil {
+		fmt.Println("Error closing file", err)
+		return
+	}
+	err = os.Remove("metrics/metrics")
+	if err != nil {
+		fmt.Println("Error removing file", err)
+		return
+	}
+	metricsFile, err = os.Create("metrics/metrics")
+	if err != nil {
+		fmt.Println("Error opening new metrics file", err)
+		return
+	}
+	amountLogFiles++
+}
+
+func forceWriteMetrics(w http.ResponseWriter, r *http.Request) {
+	postMetric()
 }
 
 func listStorageNodes(w http.ResponseWriter, r *http.Request) {
