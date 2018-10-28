@@ -54,8 +54,6 @@ var Sess *session.Session
 
 const minWorkers = 1
 
-var requestsSinceScaling = 0
-
 func main() {
 
 	err := envconfig.Init(&config)
@@ -100,17 +98,15 @@ func main() {
 
 func GetHealth(w http.ResponseWriter, r *http.Request) {
 	var response = struct {
-		MaxWorkers           int
-		MinWorkers           int
-		RequestsSinceScaling int
-		ActiveWorkers        int
-		Workers              []*node
+		MaxWorkers    int
+		MinWorkers    int
+		ActiveWorkers int
+		Workers       []*node
 	}{
-		MaxWorkers:           config.MaxWorkers,
-		MinWorkers:           minWorkers,
-		RequestsSinceScaling: requestsSinceScaling,
-		ActiveWorkers:        len(workers.filter(true, true)),
-		Workers:              workers,
+		MaxWorkers:    config.MaxWorkers,
+		MinWorkers:    minWorkers,
+		ActiveWorkers: len(workers.filter(true, true)),
+		Workers:       workers,
 	}
 
 	js, err := json.Marshal(response)
@@ -162,7 +158,6 @@ func workerDoneProcessing(w http.ResponseWriter, r *http.Request) {
 }
 
 func ProcessGraph(w http.ResponseWriter, r *http.Request) {
-	requestsSinceScaling++
 	csvReader := csv.NewReader(r.Body)
 	//Parse first line with vertex weights
 	line, err := csvReader.Read()
