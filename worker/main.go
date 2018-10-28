@@ -44,8 +44,13 @@ type Result struct {
 	Values    []float64
 }
 
+type task struct {
+	Graph      *graphs.Graph
+	Parameters map[string]string
+}
+
 var conf Config
-var graph graphs.Graph
+var taskChannel chan task
 
 func main() {
 	err := envconfig.Init(&conf)
@@ -61,12 +66,13 @@ func main() {
 	router.Use(authenticationMiddleware.Middleware)
 	router.HandleFunc("/health", GetHealth)
 	router.HandleFunc("/graph", ReceiveGraph).Methods("POST")
-	router.HandleFunc("/unregister", UnRegisterRequest).Methods("POST")
 
 	register()
 	go checkMasterHealth()
 	go sendMetrics()
 
+	taskChannel = make(chan task)
+	go ProcessGraphsWhenAvailable()
 	server := &http.Server{
 		Handler:      router,
 		Addr:         ":" + strconv.Itoa(conf.Own.Port),
@@ -80,11 +86,6 @@ func main() {
 
 func GetHealth(w http.ResponseWriter, r *http.Request) {
 
-}
-
-func UnRegisterRequest(w http.ResponseWriter, r *http.Request) {
-	// TODO check if this worker is still processing a graph and when done unregister there shouldn't be any new requests coming in
-	unregister()
 }
 
 func register() {
@@ -136,18 +137,35 @@ func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 		util.BadRequest(w, "Max steps is not a valid number: "+r.URL.Query().Get("maxsteps"), nil)
 		return
 	}
+	var graph graphs.Graph
 	err = json.Unmarshal(b, &graph)
 	if err != nil {
 		util.BadRequest(w, "Cannot unmarshal graph", err)
 		return
 	}
+	taskChannel <- task{&graph, map[string]string{"algorithm": algorithm, "maxSteps": r.URL.Query().Get("maxsteps")}}
+}
 
+func ProcessGraphsWhenAvailable() {
+	for {
+		task := <-taskChannel
+		ProcessGraph(task.Graph, task.Parameters)
+	}
+}
+
+func ProcessGraph(graph *graphs.Graph, parameters map[string]string) {
+	algorithm := parameters["algorithm"]
+	maxSteps, err := strconv.Atoi(parameters["maxSteps"])
+	if err != nil || maxSteps < 1 {
+		fmt.Println("Invalid maxSteps parameter")
+		return
+	}
 	var instance graphs.AlgorithmInterface
 	switch algorithm {
 	case "pagerank":
-		instance = &graphs.PagerankInstance{Graph: &graph, MaxSteps: maxSteps}
+		instance = &graphs.PagerankInstance{Graph: graph, MaxSteps: maxSteps}
 	case "shortestpath":
-		instance = &graphs.ShortestPathInstance{Graph: &graph}
+		instance = &graphs.ShortestPathInstance{Graph: graph}
 	default:
 		fmt.Println("Algorithm not found")
 		return
@@ -156,7 +174,7 @@ func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 	instance.Initialize()
 
 	for _, node := range graph.Nodes {
-		node.Graph = &graph
+		node.Graph = graph
 	}
 	step := 0
 outerloop:
@@ -191,18 +209,29 @@ func sendMetrics() {
 			RequestBody: metriclogger.LogBuffer,
 			Params:      map[string]string{"address": getOwnURL()},
 		}
-		resp, err := grequests.Post(getMasterURL()+"/metrics", &requestOptions)
+		_, err := grequests.Post(getMasterURL()+"/metrics", &requestOptions)
 
 		if err != nil {
 			fmt.Println("Error sending metrics to master.")
 		}
 
-		defer resp.Close()
-
 		// Clear the metrics file so we never send duplicate data.
 		metriclogger.LogBuffer.Reset()
 
 		time.Sleep(10 * time.Second)
+	  notifyMasterOnProcessCompletion(graph.Id)
+}
+
+func notifyMasterOnProcessCompletion(graphId uuid.UUID) {
+	requestOptions := grequests.RequestOptions{
+		Headers: map[string]string{"Content-Type": "application/json", "X-Auth": conf.ApiKey},
+		Params:  map[string]string{"requestID": graphId.String(), "instanceID": conf.Own.Instanceid},
+	}
+
+	_, err := grequests.Get(getMasterURL()+"/worker/done", &requestOptions)
+	if err != nil {
+		fmt.Println("Unable to notify master about finishing processing a graph, error:", err)
+		return
 	}
 }
 
