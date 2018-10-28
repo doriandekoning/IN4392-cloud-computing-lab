@@ -201,10 +201,9 @@ outerloop:
 }
 
 func notifyMasterOnProcessCompletion(graphId uuid.UUID) {
-	idBytes, _ := graphId.MarshalText()
 	requestOptions := grequests.RequestOptions{
 		Headers: map[string]string{"Content-Type": "application/json", "X-Auth": conf.ApiKey},
-		Params:  map[string]string{"requestID": string(idBytes), "instanceID": conf.Own.Instanceid},
+		Params:  map[string]string{"requestID": graphId.String(), "instanceID": conf.Own.Instanceid},
 	}
 
 	_, err := grequests.Get(getMasterURL()+"/worker/done", &requestOptions)
