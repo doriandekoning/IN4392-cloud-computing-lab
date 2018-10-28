@@ -330,7 +330,6 @@ func ProcessMetrics(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err)
 		}
 		_, err = metricsFile.Write([]byte(fmt.Sprintf("%s, %s, %s, %s, %s\n", workerAddress, line[0], line[1], line[2], line[3])))
-		fmt.Println("Error writing to file")
 
 		if err != nil {
 			fmt.Println("Error writing to file")
