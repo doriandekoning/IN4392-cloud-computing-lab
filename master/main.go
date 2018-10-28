@@ -329,6 +329,9 @@ func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 	for {
 		// Distribute graph among workers
 		worker := getLeastBusyWorker()
+		if worker == nil {
+			return
+		}
 		err := sendGraphToWorker(*graph, worker, parameters)
 		if err == nil {
 			worker.TasksProcessing = append(worker.TasksProcessing, task{graph, parameters})
@@ -342,6 +345,9 @@ func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 
 func getLeastBusyWorker() *node {
 	activeWorkers := workers.filter(true, true)
+	if len(activeWorkers) == 0 {
+		return nil
+	}
 	leastBusyWorker := activeWorkers[0]
 	for _, worker := range workers {
 		if len(worker.TasksProcessing) < len(leastBusyWorker.TasksProcessing) {
@@ -392,7 +398,9 @@ func scaleWorkers() {
 		const queueSizeThreshold = 2
 		var inactiveHealthyWorkers = workers.filter(false, true)
 		leastBusyWorker := getLeastBusyWorker()
-
+		if leastBusyWorker == nil {
+			return
+		}
 		if len(leastBusyWorker.TasksProcessing) >= queueSizeThreshold {
 			if len(inactiveHealthyWorkers) > 0 {
 				inactiveHealthyWorkers[0].Active = true
