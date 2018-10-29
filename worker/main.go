@@ -61,7 +61,8 @@ func main() {
 	go metriclogger.MonitorResourceUsage()
 
 	router := mux.NewRouter()
-	router.Use(middleware.LoggingMiddleWare{InstanceId: conf.Own.Instanceid})
+	loggingMiddleware := middleware.LoggingMiddleware{InstanceId: "storage"}
+	router.Use(loggingMiddleware.Middleware)
 	authenticationMiddleware := middleware.AuthenticationMiddleware{ApiKey: conf.ApiKey}
 	router.Use(authenticationMiddleware.Middleware)
 	router.HandleFunc("/health", GetHealth)
@@ -146,7 +147,7 @@ func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 	taskChannel <- task{&graph, map[string]string{"algorithm": algorithm, "maxSteps": r.URL.Query().Get("maxsteps")}}
 
 	// Log if a graph is added to the channel.
-	metriclogger.Measurement{conf.Own.Instanceid, WorkerQueue, len(taskChannel), 0}.Log()
+	metriclogger.Measurement{conf.Own.Instanceid, metriclogger.WorkerQueue, len(taskChannel), 0}.Log()
 }
 
 func ProcessGraphsWhenAvailable() {
@@ -155,7 +156,7 @@ func ProcessGraphsWhenAvailable() {
 		ProcessGraph(task.Graph, task.Parameters)
 
 		// Log if a graph is processed from the channel.
-		metriclogger.Measurement{conf.Own.Instanceid, WorkerQueue, len(taskChannel), 0}.Log()
+		metriclogger.Measurement{conf.Own.Instanceid, metriclogger.WorkerQueue, len(taskChannel), 0}.Log()
 	}
 }
 

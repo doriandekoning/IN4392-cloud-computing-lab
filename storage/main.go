@@ -41,6 +41,7 @@ type Result struct {
 
 var conf Config
 var graph graphs.Graph
+
 func main() {
 	err := envconfig.Init(&conf)
 	if err != nil {
@@ -48,7 +49,8 @@ func main() {
 	}
 
 	router := mux.NewRouter()
-	router.Use(middleware.LoggingMiddleWare)
+	loggingMiddleware := middleware.LoggingMiddleware{InstanceId: "storage"}
+	router.Use(loggingMiddleware.Middleware)
 	authenticationMiddleware := middleware.AuthenticationMiddleware{ApiKey: conf.ApiKey}
 	router.Use(authenticationMiddleware.Middleware)
 	router.HandleFunc("/health", GetHealth)
