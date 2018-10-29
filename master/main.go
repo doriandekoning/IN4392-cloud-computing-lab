@@ -82,7 +82,7 @@ func main() {
 	defer postMetric()
 
 	router := mux.NewRouter()
-	router.Use(middleware.LoggingMiddleWare)
+	router.Use(middleware.LoggingMiddleWare{InstanceId: "master"})
 	authenticationMiddleware := middleware.AuthenticationMiddleware{ApiKey: config.ApiKey}
 	router.Use(authenticationMiddleware.Middleware)
 	router.HandleFunc("/health", GetHealth).Methods("GET")
@@ -165,9 +165,13 @@ func workerDoneProcessing(w http.ResponseWriter, r *http.Request) {
 		if job.Graph.Id == processingRequestId {
 			worker.TasksProcessing[index] = worker.TasksProcessing[len(worker.TasksProcessing)-1]
 			worker.TasksProcessing = worker.TasksProcessing[:len(worker.TasksProcessing)-1]
+
+			// Log stoptime for job with ID so we can measure its processing time.
+			metriclogger.Measurement{"master", DoneProcessing, job.Graph.Id, 0}.Log()
 			break
 		}
 	}
+
 }
 
 func ProcessGraph(w http.ResponseWriter, r *http.Request) {
@@ -230,6 +234,10 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 		util.InternalServerError(w, "No workers found", nil)
 		return
 	}
+
+	// Log starttime for job with ID so we can measure its processing time.
+	metriclogger.Measurement{"master", StartProcessing, graph.Id, 0}.Log()
+
 	//Asynchronously distribute the graph
 	go distributeGraph(&graph, r.URL.Query())
 
@@ -268,6 +276,9 @@ func unregisterWorker(oldWorker *node) {
 	for _, task := range oldWorker.TasksProcessing {
 		distributeGraph(task.Graph, task.Parameters)
 	}
+
+	// Log the number of registered workers after deregistering a worker.
+	metriclogger.Measurement{"master", RegisteredWorkers, len(workers), 0}.Log()
 }
 
 func registerNode(w http.ResponseWriter, r *http.Request) {

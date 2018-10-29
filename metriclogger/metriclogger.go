@@ -28,11 +28,12 @@ const (
 	UsedCPUPercent
 	AvailableRAM
 	TotalRAM
+	NetworkRequest
+	RegisteredWorkers
+	WorkerQueue
+	StartProcessing
+	DoneProcessing
 )
-
-func (s Metric) String() string {
-	return [...]string{"workers_num_registered", "cpu_used_pct", "ram_available", "ram_total"}[s]
-}
 
 func (measurement Measurement) Log() {
 	if measurement.Timestamp == 0 {
