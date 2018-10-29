@@ -82,7 +82,8 @@ func main() {
 	defer postMetric()
 
 	router := mux.NewRouter()
-	router.Use(middleware.LoggingMiddleWare{InstanceId: "master"})
+	loggingMiddleware := middleware.LoggingMiddleware{InstanceId: "storage"}
+	router.Use(loggingMiddleware.Middleware)
 	authenticationMiddleware := middleware.AuthenticationMiddleware{ApiKey: config.ApiKey}
 	router.Use(authenticationMiddleware.Middleware)
 	router.HandleFunc("/health", GetHealth).Methods("GET")
@@ -167,7 +168,7 @@ func workerDoneProcessing(w http.ResponseWriter, r *http.Request) {
 			worker.TasksProcessing = worker.TasksProcessing[:len(worker.TasksProcessing)-1]
 
 			// Log stoptime for job with ID so we can measure its processing time.
-			metriclogger.Measurement{"master", DoneProcessing, job.Graph.Id, 0}.Log()
+			metriclogger.Measurement{"master", metriclogger.DoneProcessing, job.Graph.Id, 0}.Log()
 			break
 		}
 	}
@@ -236,7 +237,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log starttime for job with ID so we can measure its processing time.
-	metriclogger.Measurement{"master", StartProcessing, graph.Id, 0}.Log()
+	metriclogger.Measurement{"master", metriclogger.StartProcessing, graph.Id, 0}.Log()
 
 	//Asynchronously distribute the graph
 	go distributeGraph(&graph, r.URL.Query())
@@ -278,7 +279,7 @@ func unregisterWorker(oldWorker *node) {
 	}
 
 	// Log the number of registered workers after deregistering a worker.
-	metriclogger.Measurement{"master", RegisteredWorkers, len(workers), 0}.Log()
+	metriclogger.Measurement{"master", metriclogger.RegisteredWorkers, len(workers), 0}.Log()
 }
 
 func registerNode(w http.ResponseWriter, r *http.Request) {
