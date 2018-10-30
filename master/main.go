@@ -177,6 +177,10 @@ func workerDoneProcessing(w http.ResponseWriter, r *http.Request) {
 
 func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	csvReader := csv.NewReader(r.Body)
+
+	// Allow variable row sizes
+	csvReader.FieldsPerRecord = -1
+
 	//Parse first line with vertex weights
 	line, err := csvReader.Read()
 	if err == io.EOF {
