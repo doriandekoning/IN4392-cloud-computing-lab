@@ -98,6 +98,7 @@ func PostMetrics(path string, key string) error {
 		Key:    aws.String(key),
 		Body:   f,
 	})
+	f.Close()
 	if err != nil {
 		return err
 	}
