@@ -360,6 +360,7 @@ func scaleWorkers() {
 		//Check scaling up
 		const queueSizeThreshold = 2
 		var inactiveHealthyWorkers = workers.filter(false, true)
+
 		leastBusyWorker := getLeastBusyWorker()
 		if leastBusyWorker == nil {
 			continue
@@ -375,7 +376,9 @@ func scaleWorkers() {
 
 		//Check for scaling down
 		const scaleDownThreshold = 2
-		if len(leastBusyWorker.TasksProcessing) < scaleDownThreshold {
+		var activeHealthyWorkers = workers.filter(true, true)
+
+		if len(activeHealthyWorkers) > 1 && len(leastBusyWorker.TasksProcessing) < scaleDownThreshold {
 			leastBusyWorker.Active = false
 		}
 		for _, worker := range inactiveHealthyWorkers {
