@@ -86,10 +86,10 @@ func (n Node) GetMessages(step int) []*Message {
 	return messages
 }
 
-func FromBytes(binaryGraph []byte, size int) Graph {
+func FromBytes(binaryGraph []byte, size int, initialNodeValue float64) Graph {
 	graph := Graph{Nodes: make([]*Node, size)}
 	for i := 0; i < size; i++ {
-		graph.Nodes[i] = &Node{Id: i, IncomingEdges: make([]*Edge, 0), OutgoingEdges: make([]*Edge, 0), Graph: &graph, Active: true, Value: 0.33}
+		graph.Nodes[i] = &Node{Id: i, IncomingEdges: make([]*Edge, 0), OutgoingEdges: make([]*Edge, 0), Graph: &graph, Active: true, Value: initialNodeValue}
 	}
 
 	padding := 8 - (size * size % 8)
@@ -105,7 +105,6 @@ func FromBytes(binaryGraph []byte, size int) Graph {
 			if bitValue {
 				//Get edge weight
 				weight := math.Float32frombits(binary.LittleEndian.Uint32(binaryGraph[weightsOffset : weightsOffset+4]))
-				// fmt.Println(weight)
 				weightsOffset += 4
 				//Edge goes from i to j
 				var from, to int

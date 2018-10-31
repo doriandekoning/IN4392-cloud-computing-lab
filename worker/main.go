@@ -142,6 +142,11 @@ func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 		util.BadRequest(w, "Size is not a valid number: "+r.URL.Query().Get("size"), nil)
 		return
 	}
+	initialNodeValue, err := strconv.ParseFloat(r.URL.Query().Get("initialNodeValue"), 64)
+	if err != nil {
+		util.BadRequest(w, "InitialnodeValue is not a valid number: "+r.URL.Query().Get("initialNodeValue"), nil)
+		return
+	}
 
 	id, err := uuid.FromString(r.URL.Query().Get("requestID"))
 	if err != nil {
@@ -154,7 +159,7 @@ func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 		util.BadRequest(w, "Error reading file from request", err)
 	}
 
-	graph = graphs.FromBytes(graphBytes, size)
+	graph = graphs.FromBytes(graphBytes, size, initialNodeValue)
 	graph.Id = id
 	taskChannel <- task{&graph, map[string]string{"algorithm": algorithm, "maxSteps": r.URL.Query().Get("maxsteps")}}
 
@@ -175,7 +180,6 @@ func ProcessGraphsWhenAvailable() {
 func ProcessGraph(graph *graphs.Graph, parameters map[string]string) {
 	algorithm := parameters["algorithm"]
 	maxSteps, err := strconv.Atoi(parameters["maxSteps"])
-	fmt.Println(maxSteps)
 	if err != nil || maxSteps < 1 {
 		fmt.Println("Invalid maxSteps parameter")
 		return
