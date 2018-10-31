@@ -58,10 +58,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	go metriclogger.MonitorResourceUsage()
+	go metriclogger.MonitorResourceUsage(conf.Own.Instanceid)
 
 	router := mux.NewRouter()
-	loggingMiddleware := middleware.LoggingMiddleware{InstanceId: "storage"}
+	loggingMiddleware := middleware.LoggingMiddleware{InstanceId: conf.Own.Instanceid}
 	router.Use(loggingMiddleware.Middleware)
 	authenticationMiddleware := middleware.AuthenticationMiddleware{ApiKey: conf.ApiKey}
 	router.Use(authenticationMiddleware.Middleware)
