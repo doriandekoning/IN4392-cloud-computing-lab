@@ -50,7 +50,7 @@ func (measurement Measurement) ToCSVString() string {
 	var metricid = strconv.Itoa(int(measurement.Metric))
 	var value = fmt.Sprintf("%v", measurement.Value)
 
-	return fmt.Sprintf("%s, %s, %s, %s\n", wid, metricid, value, ts)
+	return fmt.Sprintf("%s,%s,%s,%s\n", ts, wid, metricid, value)
 }
 
 func (measurement Measurement) Write(f *os.File) {
