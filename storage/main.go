@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/graphs"
+	"github.com/doriandekoning/IN4392-cloud-computing-lab/metriclogger"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/middleware"
 	"github.com/doriandekoning/IN4392-cloud-computing-lab/util"
 	"github.com/gorilla/mux"
@@ -47,7 +48,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	go metriclogger.MonitorResourceUsage()
 	router := mux.NewRouter()
 	loggingMiddleware := middleware.LoggingMiddleware{InstanceId: "storage"}
 	router.Use(loggingMiddleware.Middleware)

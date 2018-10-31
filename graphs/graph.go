@@ -1,6 +1,11 @@
 package graphs
 
-import uuid "github.com/satori/go.uuid"
+import (
+	"encoding/binary"
+	"math"
+
+	uuid "github.com/satori/go.uuid"
+)
 
 type Message struct {
 	From    int
@@ -12,7 +17,7 @@ type Message struct {
 type Edge struct {
 	Start    int
 	End      int
-	Weight   float64
+	Weight   float32
 	Messages []*Message
 }
 
@@ -79,4 +84,38 @@ func (n Node) GetMessages(step int) []*Message {
 		}
 	}
 	return messages
+}
+
+func FromBytes(binaryGraph []byte, size int, initialNodeValue float64) Graph {
+	graph := Graph{Nodes: make([]*Node, size)}
+	for i := 0; i < size; i++ {
+		graph.Nodes[i] = &Node{Id: i, IncomingEdges: make([]*Edge, 0), OutgoingEdges: make([]*Edge, 0), Graph: &graph, Active: true, Value: initialNodeValue}
+	}
+
+	padding := 8 - (size * size % 8)
+	if padding == 8 {
+		padding = 0
+	}
+	weightsOffset := ((size * size) + padding) / 8
+
+	for i := 0; i < size; i++ {
+		for j := 0; j < size; j++ {
+			bitIndex := (i * size) + j
+			bitValue := binaryGraph[bitIndex/8]&(255&(1<<(8-1-uint(bitIndex%8)))) > 0
+			if bitValue {
+				//Get edge weight
+				weight := math.Float32frombits(binary.LittleEndian.Uint32(binaryGraph[weightsOffset : weightsOffset+4]))
+				weightsOffset += 4
+				//Edge goes from i to j
+				var from, to int
+				from = j
+				to = i
+				edge := Edge{Start: from, End: to, Weight: weight, Messages: make([]*Message, 0)}
+				graph.Nodes[from].OutgoingEdges = append(graph.Nodes[from].OutgoingEdges, &edge)
+				graph.Nodes[to].IncomingEdges = append(graph.Nodes[to].IncomingEdges, &edge)
+
+			}
+		}
+	}
+	return graph
 }

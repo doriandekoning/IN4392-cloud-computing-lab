@@ -28,7 +28,7 @@ func (instance *PagerankInstance) Step(n *Node, step int) {
 	if step >= 1 {
 		sum := 0.0
 		for _, incomingEdge := range n.IncomingEdges {
-			if incomingEdge.Messages[0] != nil && incomingEdge.Messages[0].Step == step {
+			if len(incomingEdge.Messages) > 0 && incomingEdge.Messages[0] != nil && incomingEdge.Messages[0].Step == step {
 				sum += float64(incomingEdge.Messages[0].Message)
 				//Remove first message
 				incomingEdge.Messages = incomingEdge.Messages[1:]
@@ -88,7 +88,7 @@ func (instance *ShortestPathInstance) Step(n *Node, step int) {
 			m := Message{
 				From:    n.Id,
 				To:      outgoingEdge.End,
-				Message: minDist + outgoingEdge.Weight,
+				Message: minDist + float64(outgoingEdge.Weight),
 				Step:    step + 1,
 			}
 			instance.Graph.Nodes[outgoingEdge.End].ReceiveMessage(m)
