@@ -215,6 +215,7 @@ func sendMetrics() {
 	for {
 		metriclogger.LogWriter.Flush()
 		requestOptions := grequests.RequestOptions{
+			Headers:     map[string]string{"X-Auth": conf.ApiKey},
 			RequestBody: metriclogger.LogBuffer,
 			Params:      map[string]string{"address": getOwnURL()},
 		}

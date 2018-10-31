@@ -86,13 +86,19 @@ func getInstanceIds(workers []*node) []*string {
 	return instanceIds
 }
 
-func PostMetrics(log *os.File, key string) error {
+func PostMetrics(path string, key string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+
 	scv := s3.New(Sess)
-	_, err := scv.PutObject(&s3.PutObjectInput{
+	_, err = scv.PutObject(&s3.PutObjectInput{
 		Bucket: aws.String("in4392metrics"),
 		Key:    aws.String(key),
-		Body:   log,
+		Body:   f,
 	})
+	f.Close()
 	if err != nil {
 		return err
 	}
