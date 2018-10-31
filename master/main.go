@@ -446,7 +446,7 @@ func ReceiveMetrics(w http.ResponseWriter, r *http.Request) {
 		timestamp, err := strconv.ParseInt(line[3], 10, 64)
 
 		if err != nil {
-			fmt.Println("Error parsing received mmetric")
+			fmt.Println("Error parsing received metric")
 			return
 		}
 
