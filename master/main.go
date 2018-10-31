@@ -503,7 +503,7 @@ func forceWriteMetrics(w http.ResponseWriter, r *http.Request) {
 
 func listStorageNodes(w http.ResponseWriter, r *http.Request) {
 	if storageNodes == nil {
-		w.Write([]byte("{}"))
+		w.Write([]byte("[]"))
 	} else {
 		retVal, err := json.Marshal(storageNodes)
 		if err != nil {
