@@ -48,7 +48,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	go metriclogger.MonitorResourceUsage()
+	go metriclogger.MonitorResourceUsage("storage")
 	router := mux.NewRouter()
 	loggingMiddleware := middleware.LoggingMiddleware{InstanceId: "storage"}
 	router.Use(loggingMiddleware.Middleware)
