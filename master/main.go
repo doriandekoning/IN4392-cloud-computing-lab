@@ -50,11 +50,13 @@ type node struct {
 type Config struct {
 	ApiKey     string
 	MaxWorkers int
+	LogFile    string
 }
 
 var workers NodeCollection
 var storageNodes NodeCollection
 
+var metricsFilePath = "/home/ubuntu/metrics/metrics"
 var Sess *session.Session
 
 const minWorkers = 1
@@ -75,7 +77,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Error", err)
 	}
-	metricsFile, err = os.Create("/home/ubuntu/metrics/metrics")
+	metricsFile, err = os.Create(metricsFilePath)
 	if err != nil {
 		log.Fatal("Error", err)
 	}
@@ -305,6 +307,7 @@ func registerNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	newNode.Healthy = true
+	newNode.Active = true
 	var replaced bool
 	for nodeIndex, node := range *nodesOfType {
 		if newNode.Address == node.Address {
@@ -489,8 +492,7 @@ func ProcessMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func postMetric() {
-	//TODO get name from config
-	err := PostMetrics(metricsFile, "log"+strconv.Itoa(amountLogFiles))
+	err := PostMetrics(metricsFilePath, config.LogFile+strconv.Itoa(amountLogFiles))
 	if err != nil {
 		fmt.Println("Error posting metrics", err)
 		return
@@ -500,12 +502,12 @@ func postMetric() {
 		fmt.Println("Error closing file", err)
 		return
 	}
-	err = os.Remove("/home/ubuntu/metrics/metrics")
+	err = os.Remove(metricsFilePath)
 	if err != nil {
 		fmt.Println("Error removing file", err)
 		return
 	}
-	metricsFile, err = os.Create("/home/ubuntu/metrics/metrics")
+	metricsFile, err = os.Create(metricsFilePath)
 	if err != nil {
 		fmt.Println("Error opening new metrics file", err)
 		return
