@@ -131,19 +131,31 @@ func getOwnURL() string {
 }
 
 func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
-	b, _ := ioutil.ReadAll(r.Body)
 	algorithm := r.URL.Query().Get("algorithm")
 	maxSteps, err := strconv.Atoi(r.URL.Query().Get("maxsteps"))
 	if err != nil || maxSteps < 1 {
 		util.BadRequest(w, "Max steps is not a valid number: "+r.URL.Query().Get("maxsteps"), nil)
 		return
 	}
-	var graph graphs.Graph
-	err = json.Unmarshal(b, &graph)
+	size, err := strconv.Atoi(r.URL.Query().Get("size"))
 	if err != nil {
-		util.BadRequest(w, "Cannot unmarshal graph", err)
+		util.BadRequest(w, "Size is not a valid number: "+r.URL.Query().Get("size"), nil)
 		return
 	}
+
+	id, err := uuid.FromString(r.URL.Query().Get("requestID"))
+	if err != nil {
+		util.BadRequest(w, "Size is not a valid uuid: "+r.URL.Query().Get("requestID"), nil)
+		return
+	}
+	var graph graphs.Graph
+	graphBytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		util.BadRequest(w, "Error reading file from request", err)
+	}
+
+	graph = graphs.FromBytes(graphBytes, size)
+	graph.Id = id
 	taskChannel <- task{&graph, map[string]string{"algorithm": algorithm, "maxSteps": r.URL.Query().Get("maxsteps")}}
 
 	// Log if a graph is added to the channel.
@@ -163,6 +175,7 @@ func ProcessGraphsWhenAvailable() {
 func ProcessGraph(graph *graphs.Graph, parameters map[string]string) {
 	algorithm := parameters["algorithm"]
 	maxSteps, err := strconv.Atoi(parameters["maxSteps"])
+	fmt.Println(maxSteps)
 	if err != nil || maxSteps < 1 {
 		fmt.Println("Invalid maxSteps parameter")
 		return

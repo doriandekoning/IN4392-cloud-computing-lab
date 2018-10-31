@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -34,7 +35,8 @@ type NodeCollection []*node
 var g graphs.Graph
 
 type task struct {
-	Graph      *graphs.Graph
+	Graph      []byte
+	ID         uuid.UUID
 	Parameters map[string][]string
 }
 
@@ -56,7 +58,7 @@ type Config struct {
 var workers NodeCollection
 var storageNodes NodeCollection
 
-var metricsFilePath = "/home/ubuntu/metrics/metrics"
+var metricsFilePath = "metrics/metrics"
 var Sess *session.Session
 
 const minWorkers = 1
@@ -165,12 +167,12 @@ func workerDoneProcessing(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for index, job := range worker.TasksProcessing {
-		if job.Graph.Id == processingRequestId {
+		if job.ID == processingRequestId {
 			worker.TasksProcessing[index] = worker.TasksProcessing[len(worker.TasksProcessing)-1]
 			worker.TasksProcessing = worker.TasksProcessing[:len(worker.TasksProcessing)-1]
 
 			// Log stoptime for job with ID so we can measure its processing time.
-			metriclogger.Measurement{"master", metriclogger.DoneProcessing, job.Graph.Id, 0}.Log()
+			metriclogger.Measurement{"master", metriclogger.DoneProcessing, job.ID, 0}.Log()
 			break
 		}
 	}
@@ -178,78 +180,28 @@ func workerDoneProcessing(w http.ResponseWriter, r *http.Request) {
 }
 
 func ProcessGraph(w http.ResponseWriter, r *http.Request) {
-	csvReader := csv.NewReader(r.Body)
-
-	// Allow variable row sizes
-	csvReader.FieldsPerRecord = -1
-
-	//Parse first line with vertex weights
-	line, err := csvReader.Read()
-	if err == io.EOF {
-		util.BadRequest(w, "Provided csv file is empty", err)
-		return
-	}
-	//Init graph
-	graph := graphs.Graph{Nodes: make([]*graphs.Node, len(line))}
-	graph.Id = uuid.Must(uuid.NewV4())
-
-	//Init all nodes
-	for index, weight := range line {
-		parsedWeight, err := strconv.ParseFloat(weight, 64)
-		if err != nil {
-			util.BadRequest(w, fmt.Sprint("Cannot convert edge weigth %s to float", weight), err)
-			return
-		}
-		graph.Nodes[index] = &graphs.Node{
-			Id:            index,
-			IncomingEdges: []*graphs.Edge{},
-			OutgoingEdges: []*graphs.Edge{},
-			Value:         parsedWeight,
-		}
-	}
-	//Parse edges
-	var lineNumber int
-	for {
-		lineNumber++
-		line, err := csvReader.Read()
-
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			util.BadRequest(w, fmt.Sprintf("Error reading line:%d", lineNumber), err)
-			return
-		}
-		if len(line) != 3 {
-			util.BadRequest(w, fmt.Sprint(w, "To much comma seperated parts in:%d", lineNumber), nil)
-			return
-		}
-		from, err1 := strconv.Atoi(line[0])
-		to, err2 := strconv.Atoi(line[1])
-		weight, err3 := strconv.ParseFloat(line[2], 32)
-		if err1 != nil || err2 != nil || err3 != nil {
-			util.BadRequest(w, fmt.Sprintf("Error reading line:%d", lineNumber), err1)
-			return
-		}
-
-		graph.AddEdge(graphs.Edge{Start: from, End: to, Weight: weight})
-		lineNumber++
-	}
-	g = graph
-
-	if len(workers.filter(true, true)) == 0 {
-		util.InternalServerError(w, "No workers found", nil)
-		return
-	}
-
-	// Log starttime for job with ID so we can measure its processing time.
-	metriclogger.Measurement{"master", metriclogger.StartProcessing, graph.Id, 0}.Log()
-
+	requestID := uuid.Must(uuid.NewV4())
 	//Asynchronously distribute the graph
-	go distributeGraph(&graph, r.URL.Query())
+	graph, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		util.BadRequest(w, "Error reading file from request", err)
+	}
+
+	size, err := strconv.Atoi(r.URL.Query().Get("size"))
+	if err != nil {
+		util.BadRequest(w, "Size is not a valid number: "+r.URL.Query().Get("size"), nil)
+		return
+	}
+
+	if (size * size) > len(graph) {
+		util.BadRequest(w, fmt.Sprintf("File size too small, actual: %d, expected: %d ", len(graph), (size*size)), nil)
+		return
+	}
+	task := task{Graph: graph, Parameters: r.URL.Query(), ID: requestID}
+	go distributeGraph(task)
 
 	//Write id to response
-	idBytes, _ := graph.Id.MarshalText()
+	idBytes, _ := requestID.MarshalText()
 	w.WriteHeader(http.StatusAccepted)
 	w.Write(idBytes)
 }
@@ -281,7 +233,7 @@ func unregisterWorker(oldWorker *node) {
 	}
 	//Redistribute graphs this worker was still processing
 	for _, task := range oldWorker.TasksProcessing {
-		distributeGraph(task.Graph, task.Parameters)
+		distributeGraph(task)
 	}
 
 	// Log the number of registered workers after deregistering a worker.
@@ -324,7 +276,7 @@ func registerNode(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
+func distributeGraph(task task) {
 	var activeWorkers = workers.filter(true, true)
 	if len(activeWorkers) == 0 {
 		fmt.Println("No workers available")
@@ -336,9 +288,10 @@ func distributeGraph(graph *graphs.Graph, parameters map[string][]string) {
 		if worker == nil {
 			return
 		}
-		err := sendGraphToWorker(*graph, worker, parameters)
+		task.Parameters["requestID"] = []string{task.ID.String()}
+		err := sendGraphToWorker(task, worker)
 		if err == nil {
-			worker.TasksProcessing = append(worker.TasksProcessing, task{graph, parameters})
+			worker.TasksProcessing = append(worker.TasksProcessing, task)
 			break
 		}
 		fmt.Println("Cannot distributes graph to: " + worker.Address)
@@ -361,11 +314,11 @@ func getLeastBusyWorker() *node {
 	return leastBusyWorker
 }
 
-func sendGraphToWorker(graph graphs.Graph, worker *node, parameters map[string][]string) error {
+func sendGraphToWorker(task task, worker *node) error {
 	options := grequests.RequestOptions{
-		JSON:    graph,
-		Headers: map[string]string{"Content-Type": "application/json", "X-Auth": config.ApiKey},
-		Params:  paramsMapToRequestParamsMap(parameters),
+		RequestBody: bytes.NewReader(task.Graph),
+		Headers:     map[string]string{"Content-Type": "application/json", "X-Auth": config.ApiKey},
+		Params:      paramsMapToRequestParamsMap(task.Parameters),
 	}
 	resp, err := grequests.Post(worker.Address+"/graph", &options)
 	if err != nil {
