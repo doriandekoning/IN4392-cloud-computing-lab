@@ -355,8 +355,6 @@ func scaleWorkers() {
 		if len(workers) == 0 {
 			StartNewWorker()
 			continue
-		} else if len(workers) == 1 || len(workers) > config.MaxWorkers {
-			continue
 		}
 
 		//Check scaling up
@@ -366,24 +364,25 @@ func scaleWorkers() {
 		if leastBusyWorker == nil {
 			continue
 		}
-		if len(leastBusyWorker.TasksProcessing) >= queueSizeThreshold {
+
+		if len(workers) < config.MaxWorkers && len(leastBusyWorker.TasksProcessing) >= queueSizeThreshold {
 			if len(inactiveHealthyWorkers) > 0 {
 				inactiveHealthyWorkers[0].Active = true
 			} else {
 				StartNewWorker()
 			}
 		}
+
 		//Check for scaling down
 		const scaleDownThreshold = 2
 		if len(leastBusyWorker.TasksProcessing) < scaleDownThreshold {
 			leastBusyWorker.Active = false
 		}
 		for _, worker := range inactiveHealthyWorkers {
-			if len(worker.TasksProcessing) == 0 {
+			if len(workers) > minWorkers && len(worker.TasksProcessing) == 0 {
 				unregisterWorker(worker)
 			}
 		}
-
 	}
 }
 
