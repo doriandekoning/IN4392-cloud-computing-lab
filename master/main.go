@@ -84,7 +84,7 @@ func main() {
 		log.Fatal("Error", err)
 	}
 
-	go ProcessMetrics(metricsFile)
+	go ProcessMetrics()
 
 	router := mux.NewRouter()
 	loggingMiddleware := middleware.LoggingMiddleware{InstanceId: "storage"}
@@ -415,13 +415,13 @@ func paramsMapToRequestParamsMap(original map[string][]string) map[string]string
 	return retval
 }
 
-func ProcessMetrics(f *os.File) {
+func ProcessMetrics() {
 	for {
 		select {
 		case metric := <-metriclogger.MetricChannel:
-			metric.Write(f)
+			metric.Write(metricsFile)
 
-			fileStat, err := f.Stat()
+			fileStat, err := metricsFile.Stat()
 			if err != nil {
 				log.Fatal("Error getting logfile stats", err)
 				return
@@ -435,7 +435,7 @@ func ProcessMetrics(f *os.File) {
 				postMetricToS3()
 			}
 		default:
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(1 * time.Millisecond)
 		}
 	}
 }
@@ -451,8 +451,8 @@ func ReceiveMetrics(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err)
 		}
 
-		metric, err := strconv.Atoi(line[1])
-		timestamp, err := strconv.ParseInt(line[3], 10, 64)
+		metric, err := strconv.Atoi(line[2])
+		timestamp, err := strconv.ParseInt(line[0], 10, 64)
 
 		if err != nil {
 			fmt.Println("Error parsing received metric")
@@ -460,9 +460,9 @@ func ReceiveMetrics(w http.ResponseWriter, r *http.Request) {
 		}
 
 		metriclogger.Measurement{
-			WorkerID:  line[0],
+			WorkerID:  line[1],
 			Metric:    metriclogger.Metric(metric),
-			Value:     line[2],
+			Value:     line[3],
 			Timestamp: timestamp,
 		}.Log()
 
@@ -494,6 +494,7 @@ func postMetricToS3() {
 		fmt.Println("Error opening new metrics file", err)
 		return
 	}
+
 	amountLogFiles++
 }
 
