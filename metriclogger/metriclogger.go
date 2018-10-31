@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/levigross/grequests"
@@ -45,12 +44,7 @@ func (measurement Measurement) Log() {
 }
 
 func (measurement Measurement) ToCSVString() string {
-	var ts = strconv.FormatInt(measurement.Timestamp, 10)
-	var wid = measurement.WorkerID
-	var metricid = strconv.Itoa(int(measurement.Metric))
-	var value = fmt.Sprintf("%v", measurement.Value)
-
-	return fmt.Sprintf("%s,%s,%s,%s\n", ts, wid, metricid, value)
+	return fmt.Sprintf("%d,%s,%d,%v\n", measurement.Timestamp, measurement.WorkerID, int(measurement.Metric), measurement.Value)
 }
 
 func (measurement Measurement) Write(f *os.File) {
