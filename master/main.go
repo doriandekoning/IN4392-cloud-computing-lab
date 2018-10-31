@@ -55,10 +55,10 @@ type Config struct {
 	LogFile    string
 }
 
+var metricsFilePath = "/home/ubuntu/metrics/metrics"
 var workers NodeCollection
 var storageNodes NodeCollection
 
-var metricsFilePath = "metrics/metrics"
 var Sess *session.Session
 
 const minWorkers = 1
