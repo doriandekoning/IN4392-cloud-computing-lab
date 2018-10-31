@@ -465,14 +465,14 @@ func ReceiveMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func postMetricToS3() {
-	err := PostMetrics(metricsFilePath, config.LogFile+strconv.Itoa(amountLogFiles))
-	if err != nil {
-		fmt.Println("Error posting metrics", err)
-		return
-	}
 	err = metricsFile.Close()
 	if err != nil {
 		fmt.Println("Error closing file", err)
+		return
+	}
+	err := PostMetrics(metricsFilePath, config.LogFile+strconv.Itoa(amountLogFiles))
+	if err != nil {
+		fmt.Println("Error posting metrics", err)
 		return
 	}
 	err = os.Remove(metricsFilePath)
