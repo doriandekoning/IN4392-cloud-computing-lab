@@ -291,11 +291,13 @@ func distributeGraph(task task) {
 		}
 		task.Parameters["requestID"] = []string{task.ID.String()}
 		err := sendGraphToWorker(task, worker)
-		if err == nil {
-			worker.TasksProcessing = append(worker.TasksProcessing, task)
-			break
+		if err != nil {
+			fmt.Println("Cannot distributes graph, err:", err)
+			continue
 		}
-		fmt.Println("Cannot distributes graph to: " + worker.Address)
+		worker.TasksProcessing = append(worker.TasksProcessing, task)
+		break
+
 		//Try again in 10 sec
 		time.Sleep(10 * time.Second)
 	}
