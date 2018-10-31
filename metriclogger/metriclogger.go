@@ -60,8 +60,6 @@ func MonitorResourceUsage(identifier string) {
 	var initial = true
 
 	for {
-		var err error
-
 		cpuPercent, err := cpu.Percent(0, false)
 		memstat, err := mem.VirtualMemory()
 
@@ -72,8 +70,10 @@ func MonitorResourceUsage(identifier string) {
 				initial = false
 			}
 
-			Measurement{identifier, UsedCPUPercent, cpuPercent[0], 0}.Log()
-			Measurement{identifier, AvailableRAM, memstat.Available, 0}.Log()
+			if len(cpuPercent) > 0 {
+				Measurement{identifier, UsedCPUPercent, cpuPercent[0], 0}.Log()
+				Measurement{identifier, AvailableRAM, memstat.Available, 0}.Log()
+			}
 		}
 
 		time.Sleep(1 * time.Second)
