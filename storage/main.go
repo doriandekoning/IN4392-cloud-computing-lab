@@ -49,6 +49,8 @@ func main() {
 		log.Fatal(err)
 	}
 	go metriclogger.MonitorResourceUsage("storage")
+	go metriclogger.SendMetrics(getMasterURL(), getOwnURL(), conf.ApiKey)
+
 	router := mux.NewRouter()
 	loggingMiddleware := middleware.LoggingMiddleware{InstanceId: "storage"}
 	router.Use(loggingMiddleware.Middleware)
