@@ -59,6 +59,7 @@ func main() {
 	}
 
 	go metriclogger.MonitorResourceUsage(conf.Own.Instanceid)
+	go metriclogger.SendMetrics(getMasterURL(), getOwnURL(), conf.ApiKey)
 
 	router := mux.NewRouter()
 	loggingMiddleware := middleware.LoggingMiddleware{InstanceId: conf.Own.Instanceid}
@@ -70,7 +71,6 @@ func main() {
 
 	register()
 	go checkMasterHealth()
-	go sendMetrics()
 
 	taskChannel = make(chan task)
 	go ProcessGraphsWhenAvailable()
@@ -226,27 +226,6 @@ outerloop:
 	writeResultToStorage(&result)
 	notifyMasterOnProcessCompletion(graph.Id)
 
-}
-
-func sendMetrics() {
-	for {
-		metriclogger.LogWriter.Flush()
-		requestOptions := grequests.RequestOptions{
-			Headers:     map[string]string{"X-Auth": conf.ApiKey},
-			RequestBody: metriclogger.LogBuffer,
-			Params:      map[string]string{"address": getOwnURL()},
-		}
-		_, err := grequests.Post(getMasterURL()+"/metrics", &requestOptions)
-
-		if err != nil {
-			fmt.Println("Error sending metrics to master.")
-		}
-
-		// Clear the metrics file so we never send duplicate data.
-		metriclogger.LogBuffer.Reset()
-
-		time.Sleep(10 * time.Second)
-	}
 }
 
 func notifyMasterOnProcessCompletion(graphId uuid.UUID) {

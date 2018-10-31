@@ -83,7 +83,9 @@ func main() {
 	if err != nil {
 		log.Fatal("Error", err)
 	}
-	defer postMetric()
+
+	go ProcessMetrics(metricsFile)
+	defer postMetricToS3()
 
 	router := mux.NewRouter()
 	loggingMiddleware := middleware.LoggingMiddleware{InstanceId: "storage"}
@@ -98,7 +100,7 @@ func main() {
 	router.HandleFunc("/worker/done", workerDoneProcessing).Methods("GET")
 	router.HandleFunc("/storagenode", listStorageNodes).Methods("GET")
 	router.HandleFunc("/worker/unregister", unregisterWorkerRequest).Methods("DELETE")
-	router.HandleFunc("/metrics", ProcessMetrics).Methods("POST")
+	router.HandleFunc("/metrics", ReceiveMetrics).Methods("POST")
 	router.HandleFunc("/forcewritemetrics", forceWriteMetrics).Methods("GET")
 	router.HandleFunc("/result/{processingRequestId}", getResult).Methods("GET")
 
@@ -412,39 +414,57 @@ func paramsMapToRequestParamsMap(original map[string][]string) map[string]string
 	return retval
 }
 
-func ProcessMetrics(w http.ResponseWriter, r *http.Request) {
+func ProcessMetrics(f *os.File) {
+	for {
+		metric := <-metriclogger.MetricChannel
+		metric.Write(f)
 
+		fileStat, err := f.Stat()
+		if err != nil {
+			log.Fatal("Error getting logfile stats", err)
+			return
+		}
+		//If file is larger then 10mb post it
+		if fileStat.Size() > 10*1000000 {
+			postMetricToS3()
+		}
+	}
+}
+
+func ReceiveMetrics(w http.ResponseWriter, r *http.Request) {
 	csvReader := csv.NewReader(r.Body)
 
-	workerAddress := r.URL.Query()["address"][0]
-
 	for {
-
 		line, err := csvReader.Read()
 		if err == io.EOF {
 			break
 		} else if err != nil {
 			log.Fatal(err)
 		}
-		_, err = metricsFile.Write([]byte(fmt.Sprintf("%s, %s, %s, %s, %s\n", workerAddress, line[0], line[1], line[2], line[3])))
+
+		metric, err := strconv.Atoi(line[1])
+		timestamp, err := strconv.ParseInt(line[3], 10, 64)
+
+		if err != nil {
+			fmt.Println("Error parsing received metric")
+			return
+		}
+
+		metriclogger.Measurement{
+			WorkerID:  line[0],
+			Metric:    metriclogger.Metric(metric),
+			Value:     line[2],
+			Timestamp: timestamp,
+		}.Log()
 
 		if err != nil {
 			fmt.Println("Error writing to file")
 			return
 		}
 	}
-	fileStat, err := metricsFile.Stat()
-	if err != nil {
-		log.Fatal("Error getting logfile stats", err)
-		return
-	}
-	//If file is larger then 10mb post it
-	if fileStat.Size() > 10*1000000 {
-		postMetric()
-	}
 }
 
-func postMetric() {
+func postMetricToS3() {
 	err := PostMetrics(metricsFilePath, config.LogFile+strconv.Itoa(amountLogFiles))
 	if err != nil {
 		fmt.Println("Error posting metrics", err)
@@ -469,7 +489,7 @@ func postMetric() {
 }
 
 func forceWriteMetrics(w http.ResponseWriter, r *http.Request) {
-	postMetric()
+	postMetricToS3()
 }
 
 func listStorageNodes(w http.ResponseWriter, r *http.Request) {

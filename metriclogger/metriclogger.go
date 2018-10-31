@@ -2,11 +2,12 @@ package metriclogger
 
 import (
 	"bytes"
-	"encoding/csv"
 	"fmt"
+	"os"
 	"strconv"
 	"time"
 
+	"github.com/levigross/grequests"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/mem"
 )
@@ -17,9 +18,6 @@ type Measurement struct {
 	Value     interface{}
 	Timestamp int64
 }
-
-var LogBuffer *bytes.Buffer
-var LogWriter *csv.Writer
 
 type Metric int
 
@@ -35,19 +33,37 @@ const (
 	DoneProcessing
 )
 
+var MetricChannel = make(chan Measurement)
+
 func (measurement Measurement) Log() {
 	if measurement.Timestamp == 0 {
 		measurement.Timestamp = time.Now().Unix()
 	}
 
-	var row = []string{strconv.FormatInt(measurement.Timestamp, 10), measurement.WorkerID, strconv.Itoa(int(measurement.Metric)), fmt.Sprintf("%v", measurement.Value)}
-	LogWriter.Write(row)
+	MetricChannel <- measurement
+}
+
+func (measurement Measurement) ToCSVString() string {
+	var ts = strconv.FormatInt(measurement.Timestamp, 10)
+	var wid = measurement.WorkerID
+	var metricid = strconv.Itoa(int(measurement.Metric))
+	var value = fmt.Sprintf("%v", measurement.Value)
+
+	return fmt.Sprintf("%s, %s, %s, %s\n", ts, wid, metricid, value)
+}
+
+func (measurement Measurement) Write(f *os.File) {
+	_, err := f.Write([]byte(measurement.ToCSVString()))
+
+	if err != nil {
+		fmt.Println("Error writing metric to file")
+		return
+	}
 }
 
 func MonitorResourceUsage(identifier string) {
 	var initial = true
-	LogBuffer = bytes.NewBufferString("")
-	LogWriter = csv.NewWriter(LogBuffer)
+
 	for {
 		var err error
 
@@ -63,10 +79,37 @@ func MonitorResourceUsage(identifier string) {
 
 			Measurement{identifier, UsedCPUPercent, cpuPercent[0], 0}.Log()
 			Measurement{identifier, AvailableRAM, memstat.Available, 0}.Log()
-
-			//TODO: Automation experiment => Monitor in and outgoing packets?
 		}
 
-		time.Sleep(5 * time.Second)
+		time.Sleep(1 * time.Second)
+	}
+}
+
+func SendMetrics(masterUrl string, ownUrl string, apiKey string) {
+	var LogBuffer = bytes.NewBufferString("")
+	var numWritten = 0
+
+	for {
+		metric := <-MetricChannel
+		LogBuffer.WriteString(metric.ToCSVString())
+
+		if numWritten == 10 {
+			requestOptions := grequests.RequestOptions{
+				Headers:     map[string]string{"X-Auth": apiKey},
+				RequestBody: LogBuffer,
+				Params:      map[string]string{"address": ownUrl},
+			}
+			_, err := grequests.Post(masterUrl+"/metrics", &requestOptions)
+
+			if err != nil {
+				fmt.Println("Error sending metrics to master.")
+			}
+
+			// Clear buffer
+			LogBuffer.Reset()
+			numWritten = 0
+		} else {
+			numWritten++
+		}
 	}
 }
