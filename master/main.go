@@ -85,7 +85,6 @@ func main() {
 	}
 
 	go ProcessMetrics(metricsFile)
-	defer postMetricToS3()
 
 	router := mux.NewRouter()
 	loggingMiddleware := middleware.LoggingMiddleware{InstanceId: "storage"}
@@ -418,17 +417,25 @@ func paramsMapToRequestParamsMap(original map[string][]string) map[string]string
 
 func ProcessMetrics(f *os.File) {
 	for {
-		metric := <-metriclogger.MetricChannel
-		metric.Write(f)
+		select {
+		case metric := <-metriclogger.MetricChannel:
+			metric.Write(f)
 
-		fileStat, err := f.Stat()
-		if err != nil {
-			log.Fatal("Error getting logfile stats", err)
-			return
-		}
-		//If file is larger then 10mb post it
-		if fileStat.Size() > 10*1000000 {
-			postMetricToS3()
+			fileStat, err := f.Stat()
+			if err != nil {
+				log.Fatal("Error getting logfile stats", err)
+				return
+			}
+			//If file is larger then 10mb post it
+			if fileStat.Size() > 10*1000000 {
+				postMetricToS3()
+			}
+		case force := <-metriclogger.ForceWriteChannel:
+			if force {
+				postMetricToS3()
+			}
+		default:
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 }
@@ -491,7 +498,7 @@ func postMetricToS3() {
 }
 
 func forceWriteMetrics(w http.ResponseWriter, r *http.Request) {
-	postMetricToS3()
+	metriclogger.ForceWriteChannel <- true
 }
 
 func listStorageNodes(w http.ResponseWriter, r *http.Request) {
