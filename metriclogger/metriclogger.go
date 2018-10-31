@@ -34,6 +34,7 @@ const (
 )
 
 var MetricChannel = make(chan Measurement)
+var ForceWriteChannel = make(chan bool)
 
 func (measurement Measurement) Log() {
 	if measurement.Timestamp == 0 {
