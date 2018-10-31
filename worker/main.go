@@ -157,6 +157,7 @@ func ReceiveGraph(w http.ResponseWriter, r *http.Request) {
 	graphBytes, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		util.BadRequest(w, "Error reading file from request", err)
+		return
 	}
 
 	graph = graphs.FromBytes(graphBytes, size, initialNodeValue)
