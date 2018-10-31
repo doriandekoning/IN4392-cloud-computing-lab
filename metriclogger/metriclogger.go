@@ -44,7 +44,7 @@ func (measurement Measurement) Log() {
 	LogWriter.Write(row)
 }
 
-func MonitorResourceUsage() {
+func MonitorResourceUsage(identifier string) {
 	var initial = true
 	LogBuffer = bytes.NewBufferString("")
 	LogWriter = csv.NewWriter(LogBuffer)
@@ -57,12 +57,12 @@ func MonitorResourceUsage() {
 		if err == nil {
 			// Initially we can log some extra system metrics.
 			if initial {
-				Measurement{"master", TotalRAM, memstat.Total, 0}.Log()
+				Measurement{identifier, TotalRAM, memstat.Total, 0}.Log()
 				initial = false
 			}
 
-			Measurement{"master", UsedCPUPercent, cpuPercent[0], 0}.Log()
-			Measurement{"master", AvailableRAM, memstat.Available, 0}.Log()
+			Measurement{identifier, UsedCPUPercent, cpuPercent[0], 0}.Log()
+			Measurement{identifier, AvailableRAM, memstat.Available, 0}.Log()
 
 			//TODO: Automation experiment => Monitor in and outgoing packets?
 		}

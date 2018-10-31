@@ -68,7 +68,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	go metriclogger.MonitorResourceUsage()
+	go metriclogger.MonitorResourceUsage("master")
 
 	Sess, err = session.NewSession(&aws.Config{
 		Region: aws.String("us-east-1"),
