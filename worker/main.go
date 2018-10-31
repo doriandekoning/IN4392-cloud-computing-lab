@@ -203,6 +203,7 @@ func ProcessGraph(graph *graphs.Graph, parameters map[string]string) {
 	step := 0
 outerloop:
 	for true {
+		time.Sleep(10 * time.Millisecond)
 		for _, node := range graph.Nodes {
 			if node.Active {
 				instance.Step(node, step)
