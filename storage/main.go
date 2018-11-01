@@ -42,6 +42,7 @@ type Result struct {
 
 var conf Config
 var graph graphs.Graph
+var outDir = "/home/ubuntu/out"
 
 func main() {
 	err := envconfig.Init(&conf)
@@ -59,7 +60,7 @@ func main() {
 	router.HandleFunc("/health", GetHealth)
 	router.HandleFunc("/storeresult", storeResult).Methods("POST")
 	router.HandleFunc("/result/{processingRequestID}", hasResult).Methods("GET")
-	router.PathPrefix("/results/").Handler(http.StripPrefix("/results/", http.FileServer(http.Dir("./out"))))
+	router.PathPrefix("/results/").Handler(http.StripPrefix("/results/", http.FileServer(http.Dir(outDir))))
 
 	register()
 	go checkMasterHealth()
@@ -138,7 +139,7 @@ func storeResult(w http.ResponseWriter, r *http.Request) {
 	bodyBytes, _ := ioutil.ReadAll(r.Body)
 	result := Result{}
 	json.Unmarshal(bodyBytes, &result)
-	file, err := os.Create("out/" + result.ID.String())
+	file, err := os.Create(outDir + "/" + result.ID.String())
 	if err != nil {
 		util.InternalServerError(w, "Error writing to file", err)
 		return
@@ -154,7 +155,7 @@ func hasResult(w http.ResponseWriter, r *http.Request) {
 		util.BadRequest(w, "Error parsing processingRequestId", err)
 		return
 	}
-	files, err := ioutil.ReadDir("out")
+	files, err := ioutil.ReadDir(outDir)
 	if err != nil {
 		util.InternalServerError(w, "Error reading results from filesystem", err)
 		return
