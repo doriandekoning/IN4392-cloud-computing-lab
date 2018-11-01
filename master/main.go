@@ -88,7 +88,7 @@ func main() {
 	go ProcessMetrics()
 
 	router := mux.NewRouter()
-	loggingMiddleware := middleware.LoggingMiddleware{InstanceId: "storage"}
+	loggingMiddleware := middleware.LoggingMiddleware{InstanceId: "master"}
 	router.Use(loggingMiddleware.Middleware)
 	authenticationMiddleware := middleware.AuthenticationMiddleware{ApiKey: config.ApiKey}
 	router.Use(authenticationMiddleware.Middleware)
@@ -542,7 +542,7 @@ func getResult(w http.ResponseWriter, r *http.Request) {
 		if result.statusCode != -1 && result.statusCode < 300 {
 			amountResults++
 			if amountResults >= resultsNeeded {
-				w.Write([]byte(result.nodeAddress + "/results/" + requestID.String()))
+				http.Redirect(w, r, result.nodeAddress+"/results/"+requestID.String(), http.StatusSeeOther)
 				return
 			}
 		}
@@ -550,7 +550,8 @@ func getResult(w http.ResponseWriter, r *http.Request) {
 }
 
 func storageNodeHasResult(respChannel chan hasRequestResult, nodeAddress string, requestID uuid.UUID) {
-	resp, err := grequests.Get(nodeAddress+"/result/"+requestID.String(), nil)
+	requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": config.ApiKey}}
+	resp, err := grequests.Get(nodeAddress+"/result/"+requestID.String(), &requestOptions)
 	defer resp.Close()
 	if err != nil {
 		fmt.Println("Error getting info if node has result ", err)
