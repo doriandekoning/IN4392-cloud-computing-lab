@@ -55,7 +55,7 @@ type Config struct {
 	LogFile    string
 }
 
-var metricsFilePath = "metrics/metrics"
+var metricsFilePath = "/home/ubuntu/metrics/metrics"
 var workers NodeCollection
 var storageNodes NodeCollection
 var taskChannel = make(chan task, 100)
