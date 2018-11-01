@@ -301,6 +301,7 @@ func writeResultToSpecificStorageNode(storageNode node, options grequests.Reques
 	defer resp.Close()
 	if err != nil {
 		respChannel <- -1
+		fmt.Println("Error writing to storage node :", err)
 	} else {
 		respChannel <- resp.StatusCode
 	}
