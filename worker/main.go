@@ -96,9 +96,9 @@ func register() {
 			Headers: map[string]string{"Content-Type": "application/json", "X-Auth": conf.ApiKey},
 		}
 		resp, err := grequests.Post(getMasterURL()+"/worker/register", &options)
+		defer resp.Close()
 		if err == nil && resp.StatusCode < 300 {
 			fmt.Println("Successfully registered")
-			defer resp.Close()
 			break
 		}
 		fmt.Println("Unable to register, statuscode: ", resp.StatusCode)
@@ -113,11 +113,11 @@ func unregister() {
 		Headers: map[string]string{"Content-Type": "application/json", "X-Auth": conf.ApiKey},
 	}
 	resp, err := grequests.Delete(getMasterURL()+"/worker/unregister", &options)
+	defer resp.Close()
 	if err != nil && resp.StatusCode >= 300 {
 		fmt.Println("Unable to register, statuscode:", resp.StatusCode)
 		return
 	}
-	defer resp.Close()
 	fmt.Println("Sucessfully unregistered")
 
 }
@@ -234,7 +234,8 @@ func notifyMasterOnProcessCompletion(graphId uuid.UUID) {
 		Params:  map[string]string{"requestID": graphId.String(), "instanceID": conf.Own.Instanceid},
 	}
 
-	_, err := grequests.Get(getMasterURL()+"/worker/done", &requestOptions)
+	resp, err := grequests.Get(getMasterURL()+"/worker/done", &requestOptions)
+	defer resp.Close()
 	if err != nil {
 		fmt.Println("Unable to notify master about finishing processing a graph, error:", err)
 		return
@@ -245,12 +246,10 @@ func checkMasterHealth() {
 	requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": conf.ApiKey}}
 	for {
 		resp, err := grequests.Get(getMasterURL()+"/health", &requestOptions)
-
+		defer resp.Close()
 		if err != nil {
 			fmt.Println("Master seems to be offline")
 			register()
-		} else {
-			defer resp.Close()
 		}
 		time.Sleep(10 * time.Second)
 	}
@@ -260,6 +259,7 @@ func writeResultToStorage(result *Result) {
 	//TODO maybe return this from health
 	requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": conf.ApiKey}}
 	resp, err := grequests.Get(getMasterURL()+"/storagenode", &requestOptions)
+	defer resp.Close()
 	if err != nil || resp.StatusCode >= 300 {
 		fmt.Println("Error when trying to get storage node adresses from master: ", resp.StatusCode, err)
 		return
@@ -296,6 +296,7 @@ func writeResultToStorage(result *Result) {
 func writeResultToSpecificStorageNode(storageNode node, options grequests.RequestOptions, respChannel chan int) {
 
 	resp, err := grequests.Post(storageNode.Address+"/storeresult", &options)
+	defer resp.Close()
 	if err != nil {
 		respChannel <- -1
 	} else {

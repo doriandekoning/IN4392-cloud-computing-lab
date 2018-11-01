@@ -322,10 +322,10 @@ func sendGraphToWorker(task task, worker *node) error {
 		Params:      paramsMapToRequestParamsMap(task.Parameters),
 	}
 	resp, err := grequests.Post(worker.Address+"/graph", &options)
+	defer resp.Close()
 	if err != nil {
 		return err
 	}
-	defer resp.Close()
 	return nil
 }
 
@@ -333,7 +333,8 @@ func getNodesHealth() {
 	requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": config.ApiKey}}
 	for {
 		for _, node := range append(workers, storageNodes...) {
-			_, err := grequests.Get(node.Address+"/health", &requestOptions)
+			resp, err := grequests.Get(node.Address+"/health", &requestOptions)
+			defer resp.Close()
 			if err != nil {
 				node.Healthy = false
 			} else {
@@ -547,6 +548,7 @@ func getResult(w http.ResponseWriter, r *http.Request) {
 
 func storageNodeHasResult(respChannel chan hasRequestResult, nodeAddress string, requestID uuid.UUID) {
 	resp, err := grequests.Get(nodeAddress+"/result/"+requestID.String(), nil)
+	defer resp.Close()
 	if err != nil {
 		fmt.Println("Error getting info if node has result ", err)
 	}

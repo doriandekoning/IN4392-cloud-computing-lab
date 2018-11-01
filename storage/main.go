@@ -85,6 +85,7 @@ func register() {
 			Headers: map[string]string{"Content-Type": "application/json", "X-Auth": conf.ApiKey},
 		}
 		resp, err := grequests.Post(getMasterURL()+"/storage/register", &options)
+		defer resp.Close()
 		if err == nil && resp.StatusCode < 300 {
 			fmt.Println("Successfully registered")
 			break
@@ -101,6 +102,7 @@ func unregister() {
 		Headers: map[string]string{"Content-Type": "application/json", "X-Auth": conf.ApiKey},
 	}
 	resp, err := grequests.Delete(getMasterURL()+"/storage/unregister", &options)
+	defer resp.Close()
 	if err != nil && resp.StatusCode >= 300 {
 		fmt.Println("Unable to register, statuscode:", resp.StatusCode)
 		return
@@ -122,7 +124,8 @@ func checkMasterHealth() {
 		Headers: map[string]string{"X-Auth": conf.ApiKey},
 	}
 	for {
-		_, err := grequests.Get(getMasterURL()+"/health", &options)
+		resp, err := grequests.Get(getMasterURL()+"/health", &options)
+		defer resp.Close()
 		if err != nil {
 			fmt.Println("Master seems to be offline")
 			register()
