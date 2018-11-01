@@ -296,6 +296,7 @@ func distributeGraph(task task) {
 			continue
 		}
 		worker.TasksProcessing = append(worker.TasksProcessing, task)
+		metriclogger.Measurement{"master", metriclogger.StartProcessing, task.ID, 0}.Log()
 		break
 
 		//Try again in 10 sec
