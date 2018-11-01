@@ -100,8 +100,8 @@ func SendMetrics(masterUrl string, ownUrl string, apiKey string) {
 				RequestBody: LogBuffer,
 				Params:      map[string]string{"address": ownUrl},
 			}
-			_, err := grequests.Post(masterUrl+"/metrics", &requestOptions)
-
+			resp, err := grequests.Post(masterUrl+"/metrics", &requestOptions)
+			defer resp.Close()
 			if err != nil {
 				fmt.Println("Error sending metrics to master.")
 			}
