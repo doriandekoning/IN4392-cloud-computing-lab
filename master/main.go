@@ -58,6 +58,7 @@ type Config struct {
 var metricsFilePath = "/home/ubuntu/metrics/metrics"
 var workers NodeCollection
 var storageNodes NodeCollection
+var taskChannel = make(chan task)
 
 var Sess *session.Session
 
@@ -105,6 +106,8 @@ func main() {
 
 	go scaleWorkers()
 	go getNodesHealth()
+	go distributeGraph()
+
 	server := &http.Server{
 		Handler:      router,
 		Addr:         ":8000",
@@ -121,11 +124,13 @@ func GetHealth(w http.ResponseWriter, r *http.Request) {
 		MinWorkers    int
 		ActiveWorkers int
 		Workers       []*node
+		TasksInQueue  int
 	}{
 		MaxWorkers:    config.MaxWorkers,
 		MinWorkers:    minWorkers,
 		ActiveWorkers: len(workers.filter(true, true)),
 		Workers:       workers,
+		TasksInQueue:  len(taskChannel),
 	}
 
 	js, err := json.Marshal(response)
@@ -199,7 +204,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	task := task{Graph: graph, Parameters: r.URL.Query(), ID: requestID}
-	go distributeGraph(task)
+	taskChannel <- task
 
 	//Write id to response
 	idBytes, _ := requestID.MarshalText()
@@ -234,7 +239,7 @@ func unregisterWorker(oldWorker *node) {
 	}
 	//Redistribute graphs this worker was still processing
 	for _, task := range oldWorker.TasksProcessing {
-		distributeGraph(task)
+		taskChannel <- task
 	}
 
 	// Log the number of registered workers after deregistering a worker.
@@ -277,30 +282,28 @@ func registerNode(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func distributeGraph(task task) {
-	var activeWorkers = workers.filter(true, true)
-	if len(activeWorkers) == 0 {
-		fmt.Println("No workers available")
-		return
-	}
+func distributeGraph() {
 	for {
+		task := <-taskChannel
+
 		// Distribute graph among workers
 		worker := getLeastBusyWorker()
 		if worker == nil {
-			return
+			fmt.Println("No workers available")
+			taskChannel <- task
+			continue
 		}
+
 		task.Parameters["requestID"] = []string{task.ID.String()}
 		err := sendGraphToWorker(task, worker)
 		if err != nil {
 			fmt.Println("Cannot distributes graph, err:", err)
+			taskChannel <- task
 			continue
 		}
 		worker.TasksProcessing = append(worker.TasksProcessing, task)
 		metriclogger.Measurement{"master", metriclogger.StartProcessing, task.ID, 0}.Log()
 		break
-
-		//Try again in 10 sec
-		time.Sleep(10 * time.Second)
 	}
 }
 
