@@ -55,7 +55,7 @@ type Config struct {
 	LogFile    string
 }
 
-var metricsFilePath = "/home/ubuntu/metrics/metrics"
+var metricsFilePath = "metrics/metrics"
 var workers NodeCollection
 var storageNodes NodeCollection
 var taskChannel = make(chan task)
@@ -303,7 +303,6 @@ func distributeGraph() {
 		}
 		worker.TasksProcessing = append(worker.TasksProcessing, task)
 		metriclogger.Measurement{"master", metriclogger.StartProcessing, task.ID, 0}.Log()
-		break
 	}
 }
 
