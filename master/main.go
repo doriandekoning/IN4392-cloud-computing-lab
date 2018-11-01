@@ -368,16 +368,13 @@ func scaleWorkers() {
 		var inactiveHealthyWorkers = workers.filter(false, true)
 
 		leastBusyWorker := getLeastBusyWorker()
-		if leastBusyWorker == nil {
-			continue
-		}
-
-		if len(workers) < config.MaxWorkers && len(leastBusyWorker.TasksProcessing) >= queueSizeThreshold {
+		if leastBusyWorker == nil || len(workers) < config.MaxWorkers && len(leastBusyWorker.TasksProcessing) >= queueSizeThreshold {
 			if len(inactiveHealthyWorkers) > 0 {
 				inactiveHealthyWorkers[0].Active = true
 			} else {
 				StartNewWorker()
 			}
+			continue
 		}
 
 		//Check for scaling down
