@@ -72,7 +72,7 @@ func main() {
 	register()
 	go checkMasterHealth()
 
-	taskChannel = make(chan task)
+	taskChannel = make(chan task, 10)
 	go ProcessGraphsWhenAvailable()
 	server := &http.Server{
 		Handler:      router,

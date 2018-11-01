@@ -55,10 +55,10 @@ type Config struct {
 	LogFile    string
 }
 
-var metricsFilePath = "metrics/metrics"
+var metricsFilePath = "/home/ubuntu/metrics/metrics"
 var workers NodeCollection
 var storageNodes NodeCollection
-var taskChannel = make(chan task)
+var taskChannel = make(chan task, 100)
 
 var Sess *session.Session
 
@@ -285,11 +285,11 @@ func registerNode(w http.ResponseWriter, r *http.Request) {
 func distributeGraph() {
 	for {
 		task := <-taskChannel
-
 		// Distribute graph among workers
 		worker := getLeastBusyWorker()
 		if worker == nil {
 			fmt.Println("No workers available")
+			time.Sleep(5 * time.Second)
 			taskChannel <- task
 			continue
 		}
@@ -298,6 +298,7 @@ func distributeGraph() {
 		err := sendGraphToWorker(task, worker)
 		if err != nil {
 			fmt.Println("Cannot distributes graph, err:", err)
+			time.Sleep(5 * time.Second)
 			taskChannel <- task
 			continue
 		}
