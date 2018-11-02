@@ -72,7 +72,7 @@ func main() {
 	register()
 	go checkMasterHealth()
 
-	taskChannel = make(chan task, 10)
+	taskChannel = make(chan task, 1000)
 	go ProcessGraphsWhenAvailable()
 	server := &http.Server{
 		Handler:      router,
@@ -204,7 +204,6 @@ func ProcessGraph(graph *graphs.Graph, parameters map[string]string) {
 	step := 0
 outerloop:
 	for true {
-		time.Sleep(10 * time.Millisecond)
 		for _, node := range graph.Nodes {
 			if node.Active {
 				instance.Step(node, step)
