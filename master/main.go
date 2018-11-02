@@ -191,6 +191,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	graph, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		util.BadRequest(w, "Error reading file from request", err)
+		return
 	}
 
 	size, err := strconv.Atoi(r.URL.Query().Get("size"))
