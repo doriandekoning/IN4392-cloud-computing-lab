@@ -86,12 +86,12 @@ func register() {
 			Headers: map[string]string{"Content-Type": "application/json", "X-Auth": conf.ApiKey},
 		}
 		resp, err := grequests.Post(getMasterURL()+"/storage/register", &options)
+		defer resp.Close()
 		if err == nil && resp.StatusCode < 300 {
 			fmt.Println("Successfully registered")
 			break
 		}
 		fmt.Println("Unable to register, statuscode: ", resp.StatusCode)
-		resp.Close()
 		//Try again in 10 sec
 		time.Sleep(10 * time.Second)
 	}
