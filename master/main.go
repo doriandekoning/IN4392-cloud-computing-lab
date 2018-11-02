@@ -352,13 +352,13 @@ func getNodesHealth() {
 	for {
 		for _, node := range append(workers, storageNodes...) {
 			resp, err := grequests.Get(node.Address+"/health", &requestOptions)
-			defer resp.Close()
 			if err != nil {
 				node.Healthy = false
 			} else {
 				node.Healthy = true
 				node.LastResponseTimestamp = time.Now().Unix()
 			}
+			resp.Close()
 			if time.Now().Unix()-node.LastResponseTimestamp > 60 {
 				unregisterWorker(node)
 			}
