@@ -247,11 +247,11 @@ func checkMasterHealth() {
 	requestOptions := grequests.RequestOptions{Headers: map[string]string{"X-Auth": conf.ApiKey}}
 	for {
 		resp, err := grequests.Get(getMasterURL()+"/health", &requestOptions)
-		defer resp.Close()
 		if err != nil {
 			fmt.Println("Master seems to be offline")
 			register()
 		}
+		resp.Close()
 		time.Sleep(10 * time.Second)
 	}
 }

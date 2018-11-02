@@ -126,11 +126,11 @@ func checkMasterHealth() {
 	}
 	for {
 		resp, err := grequests.Get(getMasterURL()+"/health", &options)
-		defer resp.Close()
 		if err != nil {
 			fmt.Println("Master seems to be offline")
 			register()
 		}
+		resp.Close()
 		time.Sleep(10 * time.Second)
 	}
 }
