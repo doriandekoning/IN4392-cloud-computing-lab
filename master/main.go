@@ -278,6 +278,12 @@ func registerNode(w http.ResponseWriter, r *http.Request) {
 	if !replaced {
 		*nodesOfType = append(*nodesOfType, &newNode)
 	}
+
+	if nodeType == "worker" {
+		// Log the number of registered workers after registering a worker.
+		metriclogger.Measurement{"master", metriclogger.RegisteredWorkers, len(workers), 0}.Log()
+	}
+
 	fmt.Println(nodeType + " node sucessfully registered")
 
 }
