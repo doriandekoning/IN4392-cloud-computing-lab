@@ -58,7 +58,7 @@ type Config struct {
 var metricsFilePath = "/home/ubuntu/metrics/metrics"
 var workers NodeCollection
 var storageNodes NodeCollection
-var taskChannel = make(chan task, 100)
+var taskChannel = make(chan task, 10000)
 
 var Sess *session.Session
 
