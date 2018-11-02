@@ -299,6 +299,11 @@ func distributeGraph() {
 			time.Sleep(5 * time.Second)
 			taskChannel <- task
 			continue
+		} else if len(worker.TasksProcessing) > 4 {
+			fmt.Println("All workers busy")
+			time.Sleep(1 * time.Second)
+			taskChannel <- task
+			continue
 		}
 
 		task.Parameters["requestID"] = []string{task.ID.String()}
