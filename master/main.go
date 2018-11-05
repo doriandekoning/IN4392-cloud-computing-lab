@@ -206,6 +206,7 @@ func ProcessGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	task := task{Graph: graph, Parameters: r.URL.Query(), ID: requestID}
 	taskChannel <- task
+	metriclogger.Measurement{"master", metriclogger.StartProcessing, task.ID, 0}.Log()
 
 	//Write id to response
 	idBytes, _ := requestID.MarshalText()
@@ -315,7 +316,6 @@ func distributeGraph() {
 			continue
 		}
 		worker.TasksProcessing = append(worker.TasksProcessing, task)
-		metriclogger.Measurement{"master", metriclogger.StartProcessing, task.ID, 0}.Log()
 	}
 }
 
